@@ -141,39 +141,43 @@ else:
         if not reponse:
             st.warning("لصق الجواب الأول")
         else:
+            # القاعدة 8 - ننقي النص قبل ما نفحصو
+            # نحيدو العلامات والمسافات الزايدة باش الفحص ما يغلطش
+            reponse_nqi = reponse.replace("'", "").replace('"', "").replace("’", "").strip()
+
             score = 100
             alertes = []
-            if "متأكد 100" in reponse and "مصدر" not in reponse:
+            if "متأكد 100" in reponse_nqi and "مصدر" not in reponse_nqi:
                 score -= 20
                 alertes.append("كيقول أكيد بلا مصدر - هادي علامة ديال التخمين")
-            if "بالتأكيد" in reponse:
+            if "بالتأكيد" in reponse_nqi:
                 score -= 10
                 alertes.append("كلمة بالتأكيد بلا دليل - طلب منو المصدر")
-            if len(reponse) > 2000 and "خطوة" not in reponse:
+            if len(reponse_nqi) > 2000 and "خطوة" not in reponse_nqi:
                 score -= 15
                 alertes.append("جواب طويل بلا خطوات - ممكن يكون فيه غلط مخبي")
-            if "http" not in reponse and "مصدر" not in reponse and len(reponse) > 500:
+            if "http" not in reponse_nqi and "مصدر" not in reponse_nqi and len(reponse_nqi) > 500:
                 score -= 20
                 alertes.append("ما كاينش مصدر - سولو: منين جبتي هاد المعلومة؟")
-            if "ما عرفتش" in reponse or "ممكن" in reponse:
+            if "ما عرفتش" in reponse_nqi or "ممكن" in reponse_nqi:
                 score += 10
                 alertes.append("قال ما عرفتش ولا ممكن - هادي علامة ديال الصدق، مزيان")
-            # ===== القاعدة 8 - الفعل قبل الكلام =====
-            # كيقلب على رسائل كذابة بحال تم الحفظ بلا ما يكون كاين حفظ بالصح
-            kalam_kadab = ["تم حفظ", "تم الحفظ", "تم إرسال", "تم الإرسال", "تم الدفع", "تم بنجاح", "تم حفظ الزبون"]
-            lqa_kadab = False
-            for k in kalam_kadab:
-                if k in reponse:
-                    lqa_kadab = True
-                    break
-            # واش كاين دليل على الفعل؟ ملف، قاعدة بيانات، session_state، تحقق
-            dalil_fi3l = ["session_state", "append", "open(", "write", "save", "insert", "ملف", "قاعدة بيانات", "تحقق", "نتأكد", "if"]
-            kayn_dalil = any(d in reponse for d in dalil_fi3l)
+
+            # ===== القاعدة 8 - الفعل قبل الكلام - مصححة =====
+            kalam_kadab = ["تم حفظ", "تم الحفظ", "تم ارسال", "تم الإرسال", "تم الدفع", "تم بنجاح", "تم حفظ الزبون", "تم ارسال الرسالة"]
+            lqa_kadab = any(k in reponse_nqi for k in kalam_kadab)
+
+            # حيدنا كلمة if، حيت كانت كتخرب الفحص
+            # خلينا غير الدلائل الواضحة
+            dalil_fi3l = ["session_state", "append", "open(", "write", "save", "insert", "ملف", "قاعدة بيانات", "تحقق", "نتأكد", "تجربة", "جرب"]
+            kayn_dalil = any(d in reponse_nqi for d in dalil_fi3l)
+
             if lqa_kadab and not kayn_dalil:
                 score -= 30
                 alertes.append("القاعدة 8 - خطر: كيقول تم الحفظ ولا تم الإرسال، ولكن ما كاينش دليل أن الفعل وقع بالصح. سولو: فين تحفظ؟ وريني الكود ديال الحفظ.")
             elif lqa_kadab and kayn_dalil:
                 alertes.append("القاعدة 8 - مزيان: قال تم الحفظ، وكاين دليل على الفعل. تأكد بالتجربة قبل ما تتيق 100%.")
+
             score = max(0, min(100, score))
             st.progress(score/100)
             st.write(f"نقطة الثقة: {score} من 100")
