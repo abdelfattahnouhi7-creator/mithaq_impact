@@ -1,4 +1,61 @@
 import streamlit as st
+# ===== إصلاح العربية RTL - باش القراءة تكون منظمة =====
+st.markdown("""
+<style>
+    /* كل التطبيق يقرا من اليمين لليسار */
+    .stApp {
+        direction: rtl;
+        text-align: right;
+        font-family: 'Segoe UI', 'Tahoma', 'Arial', sans-serif;
+    }
+    /* العناوين */
+    h1, h2, h3, h4 {
+        direction: rtl;
+        text-align: right !important;
+        line-height: 1.6 !important;
+    }
+    /* النصوص */
+    p, div, span, label {
+        direction: rtl;
+        text-align: right;
+        line-height: 1.8 !important;
+        unicode-bidi: embed;
+    }
+    /* الأزرار */
+    .stButton > button {
+        direction: rtl;
+        text-align: center;
+        width: 100%;
+    }
+    /* التبويبات - باش ما يتقطعوش */
+    .stTabs [data-baseweb="tab-list"] {
+        direction: rtl;
+        flex-direction: row-reverse;
+    }
+    .stTabs [data-baseweb="tab"] {
+        direction: rtl;
+        text-align: right;
+    }
+    /* مربعات النص */
+    .stTextArea textarea, .stTextInput input {
+        direction: rtl;
+        text-align: right;
+        font-size: 16px;
+        line-height: 1.8;
+    }
+    /* القوائم */
+    .stExpander {
+        direction: rtl;
+        text-align: right;
+    }
+    /* باش الكلمات الإنجليزية ما تخربقش الجملة */
+    .ltr-word {
+        direction: ltr;
+        display: inline-block;
+        unicode-bidi: embed;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 st.set_page_config(page_title="الميثاق_impact - عهدك مع AI", page_icon="📜", layout="wide")
 st.title("📜 الميثاق_impact")
