@@ -266,7 +266,8 @@ if len(hist) > 0:
     st.success("الذاكرة رجعات من Google! شوف التقرير لتحت")
 else:
     hist = st.session_state.historique
-        if len(hist) == 0:
+
+if len(hist) == 0:
             st.write("ما زال ما سجلتي والو. سير للميزان، وزن شي حاجة.")
         else:
             total = len(hist)
