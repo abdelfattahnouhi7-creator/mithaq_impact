@@ -148,14 +148,29 @@ else:
     if 'historique' not in st.session_state:
         st.session_state.historique = []
 
-    def sajel(naw3, score, qa3ida):
-        import datetime
-        st.session_state.historique.append({
-            "tarikh": datetime.datetime.now().strftime("%d/%m %H:%M"),
-            "naw3": naw3,
-            "score": score,
-            "qa3ida": qa3ida
-        })
+   # --- الذاكرة الدائمة - Google Sheets - v2.3 ---
+GOOGLE_URL = "https://script.google.com/macros/s/AKfycbwpjE6WNAdi9M_6V-ofbIDVKLs8Xpeb-SxL0SWDk8r5b9kFZAUAHe77GzvftGd4C_v0/exec"
+
+def sajel(naw3, score, qa3ida):
+    import requests
+    from datetime import datetime
+    tarikh = datetime.now().strftime("%d/%m %H:%M")
+    st.session_state.historique.append({"tarikh": tarikh, "naw3": naw3, "score": score, "qa3ida": qa3ida})
+    try:
+        requests.post(GOOGLE_URL, json={"tarikh": tarikh, "naw3": naw3, "score": score, "qa3ida": qa3ida}, timeout=5)
+    except:
+        pass
+
+def jib_dakira_men_google():
+    import requests
+    try:
+        r = requests.get(GOOGLE_URL, timeout=5)
+        data = r.json()
+        for h in data:
+            h["score"] = int(h["score"])
+        return data
+    except:
+        return [] 
 
     # ===== التنقل بين الصفحات =====
     page = st.radio("فين بغيتي تمشي؟", ["الميزان - وزن دابا", "التقرير ديالي - شوف فين كتغلط", "اقتراح القواعد - شنو خاصنا نزيدو"])
