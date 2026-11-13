@@ -135,8 +135,8 @@ elif page == "نص الميثاق":
     st.text_area("نص الميثاق - كوبيه كامل", mithaq, height=560)
 
 else:
-    st.markdown('<h2>ميزان التحقق v3.0 - دابا كيكشف الأخطاء بالصح</h2>', unsafe_allow_html=True)
-    st.markdown('<p>دابا الميزان كيجرب الكود، ماشي غير كيقرا الكلام ديالو.</p>', unsafe_allow_html=True)
+    st.markdown('<h2>ميزان التحقق v3.1 - دابا مفصول</h2>', unsafe_allow_html=True)
+    st.markdown('<p>1 - فحص الصحة: واش الكود صحيح؟ 2 - فحص الشرط: واش الكود كيدير داكشي اللي قلتي؟ 3 - معلومة: واش الأرقام عندها مصدر؟</p>', unsafe_allow_html=True)
 
     def nqi_texte(t):
         t = t.replace("'", "").replace('"', "").replace("’", "").strip()
@@ -144,8 +144,7 @@ else:
         t = t.replace("ة", "ه").replace("ؤ", "و").replace("ئ", "ي")
         return t
 
-    def halil_code(code):
-        # كيرجع: score_naks, alertes, qa3ida
+    def halil_siha(code):
         alertes = []
         naks = 0
         qa3ida = "ما كاين حتى غلط"
@@ -156,14 +155,12 @@ else:
             qa3ida = "SyntaxError - غلط في الكود"
             alertes.append(f"غلط حقيقي في الكود - السطر {e.lineno}: {e.msg}")
             if "unexpected indent" in str(e.msg) or "unindent" in str(e.msg):
-                alertes.append("هادا غلط ديال الفراغ - IndentationError. بحال اللي وقع لينا قبيلة.")
+                alertes.append("هادا غلط ديال الفراغ - IndentationError.")
             if "expected ':'" in str(e.msg):
                 alertes.append("ناقصة : في السطر - زيد : في اللخر ديال if ولا for ولا def")
             if "was never closed" in str(e.msg) or "unmatched" in str(e.msg):
-                alertes.append("قوس ( ولا [ ولا { ما تسدش. قلب على القوس الناقص.")
+                alertes.append("قوس ( ولا [ ولا { ما تسدش.")
             return naks, alertes, qa3ida
-
-        # جمع الأسماء المعرفة والمستعملة
         m3arfin = set(dir(__builtins__))
         m3arfin.update(["st", "streamlit", "requests", "pd", "np", "datetime", "os", "json", "time", "random"])
         mosta3malin = set()
@@ -189,27 +186,50 @@ else:
                         m3arfin.add(t.id)
             elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
                 mosta3malin.add(node.id)
-
-        # متغيرات ما معرّفاش
         for nom in sorted(mosta3malin - m3arfin):
             naks += 15
             if qa3ida == "ما كاين حتى غلط":
                 qa3ida = f"متغير ما معرّفش - {nom}"
             alertes.append(f"متغير ما معرّفش: {nom} - استعملتيه، ولكن ما عرّفتيهش قبل. غادي يعطيك NameError.")
-
-        # import ناقص
-        if "requests" in mosta3malin and "requests" not in imports and "requests" not in code.split("import requests")[0]:
-            # إلا ما كاينش import requests في الكود
-            if "import requests" not in code:
-                naks += 10
-                alertes.append("خاصك import requests - استعملتي requests.post، ولكن ما درتيش import requests في الأول.")
+        if "requests" in mosta3malin and "import requests" not in code:
+            naks += 10
+            alertes.append("خاصك import requests - استعملتي requests.post، ولكن ما درتيش import requests.")
         if "st." in code and "import streamlit" not in code:
             naks += 10
             alertes.append("خاصك import streamlit as st - استعملتي st.، ولكن ما درتيش import streamlit.")
         if "pd." in code and "import pandas" not in code:
             naks += 10
             alertes.append("خاصك import pandas as pd - استعملتي pd.، ولكن ما درتيش import pandas.")
+        return naks, alertes, qa3ida
 
+    def halil_chart(code, chart):
+        # فحص تحقيق الشرط - القاعدة 8 - واش الكود كيدير داكشي اللي في الجملة؟
+        alertes = []
+        naks = 0
+        qa3ida = "ما كاين حتى غلط"
+        code_nqi = nqi_texte(code)
+        chart_nqi = nqi_texte(chart)
+        # شنو هو الفعل المطلوب في الشرط؟
+        talaba_hifd = any(k in chart_nqi for k in ["حفظ", "سجل", "تسجيل"])
+        talaba_irsat = any(k in chart_nqi for k in ["ارسال", "ارسل", "واتساب", "ايميل", "رسالة"])
+        talaba_daf3 = any(k in chart_nqi for k in ["دفع", "خلص", "فلوس"])
+        fi3l_hifd = any(k in code_nqi for k in ["append", "open(", "write", "save", "insert", "session_state", "ملف", "قاعدة بيانات"])
+        fi3l_irsat = any(k in code_nqi for k in ["requests.post", "wa.me", "whatsapp", "api", "send", "smtp", "ايميل"])
+        fi3l_daf3 = any(k in code_nqi for k in ["stripe", "paypal", "payment", "دفع", "api"])
+        if talaba_hifd and not fi3l_hifd:
+            naks += 40
+            qa3ida = "القاعدة 8 - الشرط ما تحققش - حفظ"
+            alertes.append("الشرط كيقول: حفظ / تسجيل، ولكن الكود ما فيه حتى فعل ديال الحفظ - لا append، لا open، لا save. الكود غير كيقول تم الحفظ.")
+        if talaba_irsat and not fi3l_irsat:
+            naks += 40
+            qa3ida = "القاعدة 8 - الشرط ما تحققش - ارسال"
+            alertes.append("الشرط كيقول: إرسال / واتساب، ولكن الكود ما فيه حتى فعل ديال الإرسال - لا requests.post، لا wa.me، لا api. الكود غير كيقول تم الإرسال.")
+        if talaba_daf3 and not fi3l_daf3:
+            naks += 40
+            qa3ida = "القاعدة 8 - الشرط ما تحققش - دفع"
+            alertes.append("الشرط كيقول: دفع، ولكن الكود ما فيه حتى فعل ديال الدفع - لا Stripe، لا PayPal، لا api.")
+        if naks == 0:
+            alertes.append("مزيان: الشرط كيبان متحقق - لقيت في الكود فعل كيطابق الشرط. تأكد بالتجربة الحقيقية.")
         return naks, alertes, qa3ida
 
     if 'historique' not in st.session_state:
@@ -241,51 +261,43 @@ else:
     page2 = st.radio("فين بغيتي تمشي؟", ["الميزان - وزن دابا", "التقرير ديالي - شوف فين كتغلط", "اقتراح القواعد - شنو خاصنا نزيدو"])
 
     if page2 == "الميزان - وزن دابا":
-        choix = st.radio("شنو بغيتي توزن اليوم؟", ["كود - بغيت نتحقق من كود", "معلومة - بغيت نتحقق من معلومة"])
-        if choix == "كود - بغيت نتحقق من كود":
-            code_a_verifier = st.text_area("الكود - لصقو هنا", height=200, placeholder="لصق هنا الكود كامل - مثلا كود Python")
-            reponse = st.text_area("جملة التحقق - لصقها هنا", height=100, placeholder="مثال: تم إرسال الواتساب لأحمد بنجاح")
-            if st.button("وزن ليا هاد الكود وسجلها"):
-                if not code_a_verifier or not reponse:
-                    st.warning("لصق الكود والجملة بجوج")
+        choix = st.radio("شنو بغيتي توزن اليوم؟", ["1 - كود: فحص الصحة فقط - واش الكود صحيح؟", "2 - كود: فحص تحقيق الشرط - واش الكود كيدير داكشي اللي قلتي؟", "3 - معلومة: فحص الأرقام والمصدر"])
+
+        if choix == "1 - كود: فحص الصحة فقط - واش الكود صحيح؟":
+            st.write("هنا كنفحصو غير الصحة: SyntaxError، متغير ما معرّفش، import ناقص. ما كنسولوكش على الشرط.")
+            code_a_verifier = st.text_area("الكود - لصقو هنا", height=220, placeholder="لصق هنا الكود كامل")
+            if st.button("فحص الصحة ديال الكود وسجلها"):
+                if not code_a_verifier:
+                    st.warning("لصق الكود")
                 else:
-                    reponse_nqi = nqi_texte(code_a_verifier + "\n" + reponse)
-                    score = 100
-                    alertes = []
-                    qa3ida = "ما كاين حتى غلط"
-
-                    # 1 - كشف حقيقي - SyntaxError + متغيرات + import
-                    naks_haqiqi, alertes_haqiqi, qa3ida_haqiqi = halil_code(code_a_verifier)
-                    score -= naks_haqiqi
-                    alertes.extend(alertes_haqiqi)
-                    if qa3ida_haqiqi != "ما كاين حتى غلط":
-                        qa3ida = qa3ida_haqiqi
-
-                    # 2 - القاعدة 8 - تم بلا فعل
-                    if "متاكد 100" in reponse_nqi and "مصدر" not in reponse_nqi:
-                        score -= 20
-                        alertes.append("كيقول أكيد بلا مصدر")
-                    kalam_kadab = ["تم حفظ", "تم الحفظ", "تم ارسال", "تم الارسال", "تم الدفع", "تم بنجاح", "تم حفظ الزبون", "تم ارسال الرسالة", "تم ارسال الواتساب"]
-                    lqa_kadab = any(k in reponse_nqi for k in kalam_kadab)
-                    dalil_fi3l = ["session_state", "append", "open(", "write", "save", "insert", "ملف", "قاعدة بيانات", "تحقق", "نتاكد", "تجربة", "جرب", "wa.me", "whatsapp", "api", "requests.post", "send"]
-                    kayn_dalil = any(d in reponse_nqi for d in dalil_fi3l)
-                    if lqa_kadab and not kayn_dalil:
-                        score -= 30
-                        if qa3ida == "ما كاين حتى غلط":
-                            qa3ida = "القاعدة 8 - تم بلا فعل"
-                        alertes.append("القاعدة 8 - خطر: كيقول تم الحفظ ولا تم الإرسال، ولكن ما فيه حتى فعل حقيقي.")
-                    elif lqa_kadab and kayn_dalil:
-                        alertes.append("القاعدة 8 - مزيان: قال تم، وكاين دليل على الفعل. تأكد بالتجربة.")
-
-                    score = max(0, min(100, score))
+                    naks, alertes, qa3ida = halil_siha(code_a_verifier)
+                    score = max(0, min(100, 100 - naks))
                     st.progress(score/100)
-                    st.write(f"نقطة الثقة: {score} من 100")
+                    st.write(f"نقطة الصحة: {score} من 100")
                     for a in alertes:
                         st.write(a)
                     if len(alertes) == 0:
-                        st.success("الكود سليم - ما لقيت فيه حتى غلط حقيقي.")
-                    sajel("كود", score, qa3ida)
-                    st.success("تسجلت تلقائيا في الذاكرة! سير للتقرير باش تشوفها.")
+                        st.success("الكود سليم - ما لقيت فيه حتى غلط ديال الصحة.")
+                    sajel("كود - صحة", score, qa3ida)
+                    st.success("تسجلت في الذاكرة.")
+
+        elif choix == "2 - كود: فحص تحقيق الشرط - واش الكود كيدير داكشي اللي قلتي؟":
+            st.write("هنا كنفحصو غير الشرط: واش الكود بالصح كيدير داكشي اللي قلتي، ولا غير كيقولو. القاعدة 8.")
+            code_a_verifier = st.text_area("الكود - لصقو هنا", height=200, placeholder="لصق هنا الكود كامل")
+            chart = st.text_area("الشرط - شنو خاص الكود يدير؟", height=80, placeholder="مثال: تم حفظ الزبون في قاعدة البيانات - ولا - تم إرسال الواتساب لأحمد")
+            if st.button("فحص تحقيق الشرط وسجلها"):
+                if not code_a_verifier or not chart:
+                    st.warning("لصق الكود والشرط بجوج")
+                else:
+                    naks, alertes, qa3ida = halil_chart(code_a_verifier, chart)
+                    score = max(0, min(100, 100 - naks))
+                    st.progress(score/100)
+                    st.write(f"نقطة تحقيق الشرط: {score} من 100")
+                    for a in alertes:
+                        st.write(a)
+                    sajel("كود - شرط", score, qa3ida)
+                    st.success("تسجلت في الذاكرة.")
+
         else:
             question = st.text_area("السؤال - لصقو هنا", height=80, placeholder="مثال: شحال كيسوى هاد المنتوج؟")
             reponse_info = st.text_area("الجواب - لصقو هنا", height=200, placeholder="لصق هنا الجواب كامل")
@@ -330,7 +342,6 @@ else:
             st.success("الذاكرة رجعات من Google! شوف التقرير لتحت")
         else:
             hist = st.session_state.historique
-
         if len(hist) == 0:
             st.write("ما زال ما سجلتي والو. سير للميزان، وزن شي حاجة.")
         else:
@@ -348,11 +359,9 @@ else:
             st.write("التاريخ ديال التجارب:")
             for h in reversed(hist):
                 st.write(f"{h['tarikh']} - {h['naw3']} - {h['score']} - {h['qa3ida']}")
-
             if st.button("مسح الذاكرة كاملة"):
                 st.session_state.historique = []
                 st.success("تمسحات الذاكرة.")
-
     else:
         st.markdown('<h3>اقتراح القواعد</h3>', unsafe_allow_html=True)
         hist = jib_dakira_men_google()
