@@ -135,8 +135,8 @@ elif page == "نص الميثاق":
     st.text_area("نص الميثاق - كوبيه كامل", mithaq, height=560)
 
 else:
-    st.markdown('<h2>ميزان التحقق v3.1 - دابا مفصول</h2>', unsafe_allow_html=True)
-    st.markdown('<p>1 - فحص الصحة: واش الكود صحيح؟ 2 - فحص الشرط: واش الكود كيدير داكشي اللي قلتي؟ 3 - معلومة: واش الأرقام عندها مصدر؟</p>', unsafe_allow_html=True)
+    st.markdown('<h2>ميزان التحقق v3.2 - التسجيل اليدوي</h2>', unsafe_allow_html=True)
+    st.markdown('<p>دابا الميزان ما كيسجلش بوحدو. انت اللي كتقرر واش تسجل النتيجة ولا لا.</p>', unsafe_allow_html=True)
 
     def nqi_texte(t):
         t = t.replace("'", "").replace('"', "").replace("’", "").strip()
@@ -203,13 +203,11 @@ else:
         return naks, alertes, qa3ida
 
     def halil_chart(code, chart):
-        # فحص تحقيق الشرط - القاعدة 8 - واش الكود كيدير داكشي اللي في الجملة؟
         alertes = []
         naks = 0
         qa3ida = "ما كاين حتى غلط"
         code_nqi = nqi_texte(code)
         chart_nqi = nqi_texte(chart)
-        # شنو هو الفعل المطلوب في الشرط؟
         talaba_hifd = any(k in chart_nqi for k in ["حفظ", "سجل", "تسجيل"])
         talaba_irsat = any(k in chart_nqi for k in ["ارسال", "ارسل", "واتساب", "ايميل", "رسالة"])
         talaba_daf3 = any(k in chart_nqi for k in ["دفع", "خلص", "فلوس"])
@@ -234,6 +232,8 @@ else:
 
     if 'historique' not in st.session_state:
         st.session_state.historique = []
+    if 'pending' not in st.session_state:
+        st.session_state.pending = None
 
     GOOGLE_URL = "https://script.google.com/macros/s/AKfycbwpjE6WNAdi9M_6V-ofbIDVKLs8Xpeb-SxL0SWDk8r5b9kFZAUAHe77GzvftGd4C_v0/exec"
 
@@ -246,6 +246,8 @@ else:
             requests.post(GOOGLE_URL, json={"tarikh": tarikh, "naw3": naw3, "score": score, "qa3ida": qa3ida}, timeout=5)
         except:
             pass
+        st.session_state.pending = None
+        st.success("تسجلت! سير للتقرير باش تشوفها.")
 
     def jib_dakira_men_google():
         import requests
@@ -263,10 +265,20 @@ else:
     if page2 == "الميزان - وزن دابا":
         choix = st.radio("شنو بغيتي توزن اليوم؟", ["1 - كود: فحص الصحة فقط - واش الكود صحيح؟", "2 - كود: فحص تحقيق الشرط - واش الكود كيدير داكشي اللي قلتي؟", "3 - معلومة: فحص الأرقام والمصدر"])
 
+        # بوطونة التسجيل اليدوي - كتبان إلا كانت كاينة نتيجة معلقة
+        if st.session_state.pending is not None:
+            p = st.session_state.pending
+            st.info(f"نتيجة معلقة: {p['naw3']} - {p['score']} من 100 - {p['qa3ida']}")
+            if st.button("سجل هاد النتيجة في التقرير", key="sajel_pending"):
+                sajel(p['naw3'], p['score'], p['qa3ida'])
+            if st.button("ما تسجلهاش - تجاهلها", key="tajahl_pending"):
+                st.session_state.pending = None
+                st.info("تجاهلتيها، ما تسجلت والو.")
+
         if choix == "1 - كود: فحص الصحة فقط - واش الكود صحيح؟":
             st.write("هنا كنفحصو غير الصحة: SyntaxError، متغير ما معرّفش، import ناقص. ما كنسولوكش على الشرط.")
             code_a_verifier = st.text_area("الكود - لصقو هنا", height=220, placeholder="لصق هنا الكود كامل")
-            if st.button("فحص الصحة ديال الكود وسجلها"):
+            if st.button("فحص الصحة ديال الكود"):
                 if not code_a_verifier:
                     st.warning("لصق الكود")
                 else:
@@ -278,14 +290,15 @@ else:
                         st.write(a)
                     if len(alertes) == 0:
                         st.success("الكود سليم - ما لقيت فيه حتى غلط ديال الصحة.")
-                    sajel("كود - صحة", score, qa3ida)
-                    st.success("تسجلت في الذاكرة.")
+                    # ما كنسجلوش تلقائيا - كنحطوها معلقة حتى تقرر انت
+                    st.session_state.pending = {"naw3": "كود - صحة", "score": score, "qa3ida": qa3ida}
+                    st.info("ما تسجلت والو دابا. إلا بغيتي تسجل هاد النتيجة، ورك على سجل هاد النتيجة اللي الفوق.")
 
         elif choix == "2 - كود: فحص تحقيق الشرط - واش الكود كيدير داكشي اللي قلتي؟":
             st.write("هنا كنفحصو غير الشرط: واش الكود بالصح كيدير داكشي اللي قلتي، ولا غير كيقولو. القاعدة 8.")
             code_a_verifier = st.text_area("الكود - لصقو هنا", height=200, placeholder="لصق هنا الكود كامل")
             chart = st.text_area("الشرط - شنو خاص الكود يدير؟", height=80, placeholder="مثال: تم حفظ الزبون في قاعدة البيانات - ولا - تم إرسال الواتساب لأحمد")
-            if st.button("فحص تحقيق الشرط وسجلها"):
+            if st.button("فحص تحقيق الشرط"):
                 if not code_a_verifier or not chart:
                     st.warning("لصق الكود والشرط بجوج")
                 else:
@@ -295,13 +308,13 @@ else:
                     st.write(f"نقطة تحقيق الشرط: {score} من 100")
                     for a in alertes:
                         st.write(a)
-                    sajel("كود - شرط", score, qa3ida)
-                    st.success("تسجلت في الذاكرة.")
+                    st.session_state.pending = {"naw3": "كود - شرط", "score": score, "qa3ida": qa3ida}
+                    st.info("ما تسجلت والو دابا. إلا بغيتي تسجلها، ورك على سجل هاد النتيجة اللي الفوق.")
 
         else:
             question = st.text_area("السؤال - لصقو هنا", height=80, placeholder="مثال: شحال كيسوى هاد المنتوج؟")
             reponse_info = st.text_area("الجواب - لصقو هنا", height=200, placeholder="لصق هنا الجواب كامل")
-            if st.button("وزن ليا هاد المعلومة وسجلها"):
+            if st.button("وزن ليا هاد المعلومة"):
                 if not question or not reponse_info:
                     st.warning("لصق السؤال والجواب بجوج")
                 else:
@@ -331,8 +344,8 @@ else:
                     st.write(f"نقطة الثقة: {score} من 100")
                     for a in alertes:
                         st.write(a)
-                    sajel("معلومة", score, qa3ida)
-                    st.success("تسجلت تلقائيا في الذاكرة! سير للتقرير باش تشوفها.")
+                    st.session_state.pending = {"naw3": "معلومة", "score": score, "qa3ida": qa3ida}
+                    st.info("ما تسجلت والو دابا. إلا بغيتي تسجلها، ورك على سجل هاد النتيجة اللي الفوق.")
 
     elif page2 == "التقرير ديالي - شوف فين كتغلط":
         st.markdown('<h3>التقرير ديالي</h3>', unsafe_allow_html=True)
@@ -343,7 +356,7 @@ else:
         else:
             hist = st.session_state.historique
         if len(hist) == 0:
-            st.write("ما زال ما سجلتي والو. سير للميزان، وزن شي حاجة.")
+            st.write("ما زال ما سجلتي والو. سير للميزان، وزن شي حاجة، وورك سجل هاد النتيجة.")
         else:
             total = len(hist)
             moyenne = sum([int(h["score"]) for h in hist]) / total
