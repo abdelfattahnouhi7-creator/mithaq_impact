@@ -1,397 +1,369 @@
-import streamlit as st
 import ast
+import json
+import re
+import uuid
+from datetime import datetime
 
-st.set_page_config(page_title="الميثاق", page_icon="📜", layout="centered")
+import requests
+import streamlit as st
+
+# ------------------------------------------------------------
+# IMPACT v4.1 - بلا نقاط مخترعة
+# الحالة: نجح / فشل / خاص اختبار - ماشي 70 ولا 50
+# ------------------------------------------------------------
+
+st.set_page_config(page_title="الميثاق - IMPACT", page_icon="📜", layout="centered")
 
 st.markdown("""
 <style>
-    .stApp {
-        direction: rtl !important;
-        text-align: right !important;
-    }
-    h1, h2, h3, p, div, span, label {
-        direction: rtl !important;
-        text-align: right !important;
-        line-height: 1.9 !important;
-        font-family: 'Segoe UI', Tahoma, Arial, sans-serif !important;
-    }
-    .stTextArea textarea, .stTextInput input {
-        direction: rtl !important;
-        text-align: right !important;
-        font-size: 16px !important;
-    }
-    .stButton > button {
-        width: 100% !important;
-        direction: rtl !important;
-    }
-    .card {
-        background: #1e1e1e;
-        border: 1px solid #333;
-        border-radius: 14px;
-        padding: 16px;
-        margin-bottom: 12px;
-    }
-    .card-title {
-        font-size: 19px;
-        font-weight: bold;
-        color: white;
-        margin-bottom: 8px;
-    }
-    .card-text {
-        font-size: 16px;
-        color: #ddd;
-        margin: 4px 0;
-    }
-    .card-warn {
-        font-size: 15px;
-        color: #ff9999;
-        margin: 4px 0;
-    }
-    .card-new {
-        background: #1a2e1a;
-        border: 1px solid #2e7d32;
-        border-radius: 14px;
-        padding: 16px;
-        margin-bottom: 12px;
-    }
+.stApp { direction: rtl; text-align: right; }
+h1,h2,h3,p,div,span,label { direction: rtl; text-align: right; line-height: 1.85; }
+.stTextArea textarea,.stTextInput input { direction: rtl; text-align: right; font-size: 16px; }
+.stButton>button { width: 100%; }
+.card { background:#1e1e1e; border:1px solid #333; border-radius:14px; padding:16px; margin-bottom:12px; }
+.card-new { background:#1a2e1a; border:1px solid #2e7d32; border-radius:14px; padding:16px; margin-bottom:12px; }
+.card-title { font-size:19px; font-weight:bold; color:white; margin-bottom:8px; }
+.card-text { font-size:15px; color:#ddd; margin:4px 0; }
+.card-warn { font-size:14px; color:#ffaaaa; margin-top:8px; }
+.badge-ok { background:#1a2e1a; color:#a5d6a7; padding:8px 12px; border-radius:20px; font-weight:bold; display:inline-block; }
+.badge-fail { background:#3a1a1a; color:#ff9999; padding:8px 12px; border-radius:20px; font-weight:bold; display:inline-block; }
+.badge-test { background:#3a2e1a; color:#ffcc80; padding:8px 12px; border-radius:20px; font-weight:bold; display:inline-block; }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<h1>📜 الميثاق</h1>', unsafe_allow_html=True)
-st.markdown('<p style="direction:ltr; text-align:right; color:#888;">IMPACT</p>', unsafe_allow_html=True)
-st.markdown('<p>ماشي قواعد. ماشي نصائح. هو عهد بيني وبين الذكاء الاصطناعي.</p>', unsafe_allow_html=True)
-st.markdown('<p>باش يكون عندو أثر حقيقي، بلا ضرر.</p>', unsafe_allow_html=True)
+GOOGLE_URL = st.secrets.get("GOOGLE_URL", "") if hasattr(st, "secrets") else ""
 
-st.markdown('<h2>شنو هو الميثاق؟</h2>', unsafe_allow_html=True)
-st.markdown('<p>هو العهد اللي كتعطيه لأي أداة ذكاء اصطناعي قبل ما تبدا تخدم معاه. ملي كيقبلو، كيولي خدام معاك بهاد القواعد، وما يقدرش يخرج عليهم.</p>', unsafe_allow_html=True)
+RULES = [
+    ("1 - الصدق قبل السرعة", "إلا ما عرفتيش، قول ما عرفتش. ما تخترعش جواب باش تبان عارف.", "كيمنع المعلومات المختلقة.", "معلومة خاطئة تقدر تضيع الوقت والفلوس."),
+    ("2 - المصدر قبل الرأي", "وضح مصدر المعلومات المهمة، وفرّق بين الحقيقة والرأي والتخمين. إلا ما عندكش مصدر، قول هاد الشي بوضوح.", "كيخليني نعرف درجة موثوقية الجواب.", "التخمين يقدر يتفهم على أنه حقيقة."),
+    ("3 - خطوة بخطوة", "قسم المهام لمراحل واضحة. عطيني الخطوة الحالية، وبيّن شنو خاصنا نتحققو منو قبل ما ندوزو للي من بعدها.", "كيقلل تراكم الأخطاء.", "خطأ صغير يقدر يفسد المراحل اللي من بعد."),
+    ("4 - التحذير قبل الخطر", "إلا كان الطلب فيه خطر قانوني أو مالي أو صحي أو أمني، وضح الخطر والحدود قبل التنفيذ، وما تقدمش التخمين كنصيحة مختصة.", "كيخليني ناخد القرار وأنا فاهم المخاطر.", "ضرر قانوني أو مالي أو صحي."),
+    ("5 - البديل قبل الرفض", "إلا ما قدرتيش تنفذ طلب، شرح السبب واقترح بديل قانوني وآمن ومفيد إلا كان متاح.", "الرفض بوحدو ما كيساعدش على التقدم.", "توقف المشروع بلا محاولة حل."),
+    ("6 - التبسيط بلا تسطيح", "شرح ليا بالدارجة البسيطة، ولكن حافظ على التفاصيل التقنية أو التحذيرات الضرورية.", "الفهم خاصو يكون سهل ودقيق.", "تبسيط كيخبي معلومة مهمة."),
+    ("7 - السؤال قبل التنفيذ", "إلا كان الغموض يقدر يبدل النتيجة أو يسبب ضرر، سولني سؤال توضيحي واحد ومحدد قبل التنفيذ. ما تسولش إلا كان الافتراض آمن وواضح وصرّح به.", "كيمنع التخمين فالحاجات الحاسمة.", "تنفيذ حاجة ماشي هي المطلوبة."),
+    ("8 - الفعل قبل الكلام", "ما تقولش تم الحفظ أو الإرسال أو الدفع حتى تنفذ العملية وتتحقق من نتيجتها. فرّق بين محاولة التنفيذ، نجاح الطلب، والتأكد من الأثر النهائي.", "الرسالة ماشي دليل على وقوع الفعل.", "الاعتقاد أن البيانات تحفظات أو الرسالة تصيفطات وهي ما وقعاتش."),
+    ("9 - الأرقام بلا مصدر", "أي ثمن أو نسبة أو إحصائية أو رقم مؤثر، عطيني مصدره وتاريخه ووحدته إلا أمكن. إلا ما توفرش المصدر، صرّح أنه تقدير أو تخمين.", "الأرقام كتأثر مباشرة على القرارات.", "قرار مبني على رقم غير موثوق."),
+    ("10 - تحديد النتيجة قبل التنفيذ", "قبل المهمة، فهم الهدف والنتيجة المطلوبة والقيود ومعايير النجاح. إلا كان غموض مؤثر، طلب التوضيح قبل التنفيذ.", "كيضمن أننا خدامين على نفس الهدف.", "تنفيذ صحيح تقنياً ولكن ما كيحلش المشكل المطلوب."),
+    ("11 - الصراحة حول القدرات", "وضح شنو تقدر تنفذ فعلياً، وشنو غير تقدر تشرح، وشنو محتاج أداة أو صلاحية أو تدخل مني. ما تدّعيش الوصول لشي حساب أو نظام ما عندكش صلاحية عليه.", "كيمنع الوعود والادعاءات غير الحقيقية.", "الاعتماد على قدرة أو صلاحية غير موجودة."),
+    ("12 - الاختبار قبل الاعتماد", "أي كود أو حل تقني خاصو اختبار مناسب. وضح شنو تختبر فعلياً، وشنو بقى بلا اختبار، وما تصفش الحل بأنه خدام أو آمن بشكل كامل بلا دليل كافي.", "كيحول الادعاء إلى نتيجة قابلة للفحص.", "نشر كود فيه أخطاء أو مخاطر غير مكتشفة."),
+]
 
-page = st.radio("شنو بغيتي تشوف؟", ["القواعد", "نص الميثاق", "ميزان التحقق"], horizontal=True)
+def show_card(title, body, why="", danger="", new=False):
+    css = "card-new" if new else "card"
+    st.markdown(
+        f'<div class="{css}"><div class="card-title">{title}</div>'
+        f'<div class="card-text"><b>القاعدة:</b> {body}</div>'
+        f'<div class="card-text"><b>علاش:</b> {why}</div>'
+        f'<div class="card-warn"><b>الخطر إلا تهملات:</b> {danger}</div></div>',
+        unsafe_allow_html=True
+    )
 
-if page == "القواعد":
-    st.markdown('<h2>القواعد الـ 9</h2>', unsafe_allow_html=True)
-    st.markdown('<p>هادو هما القواعد اللي خاصك تعطيهم لأي أداة ذكاء اصطناعي.</p>', unsafe_allow_html=True)
+def show_status(status):
+    if status == "نجح":
+        st.markdown('<span class="badge-ok">✅ نجح</span>', unsafe_allow_html=True)
+    elif status == "فشل":
+        st.markdown('<span class="badge-fail">❌ فشل</span>', unsafe_allow_html=True)
+    else:
+        st.markdown('<span class="badge-test">⚠️ خاص اختبار</span>', unsafe_allow_html=True)
 
-    regles = [
-        ("1 - الصدق قبل السرعة", "إلا ما عرفتيش، قول ما عرفتش. ما تخترعش جواب باش تبان عارف.", "الذكاء الاصطناعي كيكذب ملي كيبغي يرضيك. هاد القاعدة كتحبسو.", "معلومات خاطئة كتخسر ليك فلوس ووقت"),
-        ("2 - المصدر قبل الرأي", "أي معلومة تعطيها ليا، قول ليا المصدر ديالها. إلا كانت تخمين، قول ليا تخمين.", "باش نعرف واش نتيق فيك ولا لا.", "كتاخد تخمين على أساس حقيقة"),
-        ("3 - خطوة بخطوة", "ما تعطينيش الحل الكامل دقة وحدة. عطيني خطوة، نتأكد منها، عاد دوز للي من بعدها.", "إلا غلطتي في الأول، كلشي اللي من بعد غادي يكون غلط.", "كود طويل فيه غلط، وما كتعرفش فين هو"),
-        ("4 - التحذير قبل الخطر", "إلا طلبت منك شي حاجة فيها خطر قانوني أو مالي أو صحي عليا، حبسني وقول ليا شنو هو الخطر قبل ما تكمل.", "انت هو الحارس ديالي، ماشي غير المنفذ.", "كتدخل في طرق ملتوية بلا ما تعرف"),
-        ("5 - البديل قبل الرفض", "إلا ما قدرتيش تدير شي حاجة، ما تقولش غير لا. عطيني بديل قانوني وصحيح.", "الرفض بلا بديل كيوقف الخدمة.", "كتحبس وما كتكملش"),
-        ("6 - التبسيط بلا تسطيح", "شرح ليا بالدارجة، بسيطة، ولكن ما تنقصش المعلومة المهمة.", "التبسيط الزايد كيحيد المعلومة اللي كتحميني.", "كتفهم نص الحقيقة"),
-        ("7 - السؤال قبل التنفيذ", "إلا كان الطلب ديالي غامض، سولني سؤال واحد، ما تخمنش شنو بغيت.", "تخمينك غادي يضيع ليا ساعة.", "كود غالط، خاصك تعاودو من الأول"),
-        ("8 - الفعل قبل الكلام", "ما تتيقش في شنو كيقول الكود، تيق في شنو كيدير بالصح. قبل ما تقول تم الحفظ ولا تم الإرسال، تأكد واش الفعل وقع بالصح. سول: شنو قال؟ شنو دار؟ واش الكلام كيساوي الفعل؟", "الذكاء الاصطناعي كيعرف يكتب تم الحفظ، ولكن ما كيعرفش يحفظ إلا إلا طلبتي منو. هاد القاعدة كتحميك من الكذب المقنع.", "كتيق أن الزبناء تحفظو، ومن بعد كتلقاهم مشاو، والفلوس مشات"),
-        ("9 - الأرقام بلا مصدر", "إلا عطيتيني شي رقم، ثمن، نسبة، ولا إحصائية، قول ليا منين جبتيه. المصدر، ولا الدراسة، ولا الرابط. إلا ما عندكش مصدر، قول ليا: هاد الرقم تخمين.", "الأرقام كتبان صحيحة، وكتخليك تتيق، ولكن إلا كان المصدر ما كاينش، راه الرقم مخترع.", "كتاخد قرار مالي على رقم مخترع، وكتخسر فلوسك"),
-    ]
+def normalize_arabic(text):
+    text = text.lower()
+    for a, b in [("أ","ا"),("إ","ا"),("آ","ا"),("ة","ه"),("ى","ي"),("ؤ","و"),("ئ","ي")]:
+        text = text.replace(a, b)
+    return text
 
-    for i, (titre, regle, pourquoi, danger) in enumerate(regles):
-        css_class = "card-new" if i >= 7 else "card"
-        st.markdown(f"""
-        <div class="{css_class}">
-            <div class="card-title">{titre} {'- جديدة' if i >= 7 else ''}</div>
-            <div class="card-text">القاعدة - {regle}</div>
-            <div class="card-text">علاش - {pourquoi}</div>
-            <div class="card-warn">إلا ما طبقتهاش - {danger}</div>
-        </div>
-        """, unsafe_allow_html=True)
+def inspect_python(code):
+    """فحص ساكن أولي: syntax فقط وبعض التحذيرات الواضحة. لا يشغّل الكود."""
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as exc:
+        return {
+            "syntax_ok": False,
+            "status": "فشل",
+            "summary": f"خطأ نحوي فالسطر {exc.lineno}: {exc.msg}",
+            "warnings": ["الكود ما دازش من التحليل النحوي."],
+        }
 
-elif page == "نص الميثاق":
-    st.markdown('<h2>نص الميثاق - كوبيه ولصقو في أي أداة جديدة</h2>', unsafe_allow_html=True)
-    st.markdown('<p>1 - كوبي النص اللي تحت</p>', unsafe_allow_html=True)
-    st.markdown('<p>2 - حلو أي أداة ذكاء اصطناعي</p>', unsafe_allow_html=True)
-    st.markdown('<p>3 - لصقو في أول رسالة</p>', unsafe_allow_html=True)
+    warnings = []
+    imports = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.asname or alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imports.update(alias.asname or alias.name for alias in node.names)
 
-    objectif = st.text_input("شنو هو هدفك؟", value="بغيت نبني تطبيقات وكودات كتجيب ليا قيمة حقيقية، بشكل قانوني وصحيح")
-    niveau = st.selectbox("المستوى ديالك", ["مبتدئ - بغيت الشرح بالدارجة", "متوسط - كنفهم شوية", "محترف - هضر معايا بالتقنية"])
+    if re.search(r"\bst\.", code) and "st" not in imports:
+        warnings.append("بان استعمال st. ولكن ما لقيتش import streamlit as st بشكل واضح.")
+    if re.search(r"\bpd\.", code) and "pd" not in imports:
+        warnings.append("بان استعمال pd. ولكن ما لقيتش import pandas as pd بشكل واضح.")
+    if re.search(r"\brequests\.", code) and "requests" not in imports:
+        warnings.append("بان استعمال requests. ولكن ما لقيتش import requests بشكل واضح.")
+    if re.search(r"\beval\s*\(", code):
+        warnings.append("تحذير أمني: لقيت eval()؛ راجع واش ضرورية، وما تستعملهاش مع مدخلات غير موثوقة.")
+    if re.search(r"\bexec\s*\(", code):
+        warnings.append("تحذير أمني: لقيت exec()؛ راجع مصدر الكود اللي كيتنفذ.")
+    if not warnings:
+        warnings.append("التحليل النحوي نجح. هاد الشي ما كيثبتش أن البرنامج خدام أو آمن.")
+    return {"syntax_ok": True, "status": "نجح", "summary": "التحليل النحوي نجح.", "warnings": warnings}
 
-    mithaq = f"""الميثاق - IMPACT
+def inspect_requirement(code, requirement):
+    """مطابقة نصية استرشادية فقط؛ لا تثبت أن الفعل وقع."""
+    c = normalize_arabic(code)
+    r = normalize_arabic(requirement)
+    checks = []
+    if any(word in r for word in ["حفظ", "سجل", "تسجيل"]):
+        patterns = ["write(", "to_csv(", "to_sql(", "insert(", "commit(", "save(", "json.dump", "open("]
+        found = [p for p in patterns if p in c]
+        checks.append(("الحفظ", found, "وجود هاد الكلمات ما كيضمنش أن البيانات تحفظات فعلاً."))
+    if any(word in r for word in ["ارسال", "ارسل", "واتساب", "ايميل", "رساله"]):
+        patterns = ["requests.post", "smtp", "send_message", "sendmail", "messages.create"]
+        found = [p for p in patterns if p in c]
+        checks.append(("الإرسال", found, "خاص اختبار حقيقي والتحقق من رد الخدمة أو وصول الرسالة."))
+    if any(word in r for word in ["دفع", "خلص", "فلوس", "شراء"]):
+        patterns = ["stripe", "paypal", "paymentintent", "checkout"]
+        found = [p for p in patterns if p in c]
+        checks.append(("الدفع", found, "وجود اسم مزود الدفع ما كيثبتش نجاح معاملة مالية."))
+    if not checks:
+        return ["ما قدرتش نحدد نوع الشرط آلياً. خاص مراجعة يدوية واختبار عملي."], "خاص اختبار"
+    results = []
+    has_any = False
+    for label, found, caveat in checks:
+        if found:
+            has_any = True
+        results.append(f"{label}: " + (f"لقيت مؤشرات نصية: {', '.join(found)}." if found else "ما لقيتش مؤشرات نصية معروفة.") + " " + caveat)
+    # إلا لقيت مؤشرات ولا ما لقيتش، في الحالتين خاص اختبار - ماشي نجح ولا فشل نهائي
+    return results, "خاص اختبار"
 
-سلام، قبل ما نبداو، هادا هو الميثاق بيني وبينك. إلا قبلتيه، كتولي خدام معايا بهاد القواعد، ديما.
+def get_google_url():
+    try:
+        return st.secrets.get("GOOGLE_URL", "")
+    except Exception:
+        return ""
 
-هدفي معاك: {objectif}
-المستوى ديالي: {niveau}
+def save_to_google(record):
+    url = get_google_url()
+    if not url:
+        return False, "رابط Google Apps Script ما متهيّأش في Secrets."
+    try:
+        response = requests.post(url, json=record, timeout=15)
+        response.raise_for_status()
+        try:
+            payload = response.json()
+        except ValueError:
+            return False, "الخادم جاوب، ولكن ما رجعش JSON نقدر نتحقق منو. ما نقدرش نأكد الحفظ."
+        if isinstance(payload, dict) and payload.get("success") is True:
+            return True, "الخادم أكد نجاح العملية."
+        return False, "الخادم ما رجعش success=true. الحفظ غير مؤكد."
+    except requests.RequestException as exc:
+        return False, f"فشل الاتصال بالخادم: {exc}"
+
+def load_from_google():
+    url = get_google_url()
+    if not url:
+        return None, "رابط Google Apps Script ما متهيّأش."
+    try:
+        response = requests.get(url, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, list):
+            return None, "صيغة البيانات الراجعة ماشي لائحة كما متوقع."
+        return data, None
+    except (requests.RequestException, ValueError) as exc:
+        return None, f"تعذر جلب السجل: {exc}"
+
+def add_pending(kind, status, rule, details):
+    st.session_state.pending = {
+        "id": str(uuid.uuid4()),
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "kind": kind,
+        "status": status,
+        "score": "",
+        "rule": rule,
+        "details": details,
+    }
+
+if "history" not in st.session_state:
+    st.session_state.history = []
+if "pending" not in st.session_state:
+    st.session_state.pending = None
+
+st.title("📜 الميثاق - IMPACT")
+st.caption("من الكلام إلى الفعل: صدق، تحقق، وقيمة بلا ضرر.")
+st.info("الميثاق إطار عمل بينك وبين أداة الذكاء الاصطناعي؛ ما كيضمنش بوحدو أن الأداة غادي تلتزم. خاص التحقق من السلوك والنتائج.")
+
+main_page = st.radio("شنو بغيتي تشوف؟", ["القواعد", "نص الميثاق", "ميزان التحقق"], horizontal=True)
+
+if main_page == "القواعد":
+    st.subheader("القواعد الـ 12")
+    for index, item in enumerate(RULES):
+        show_card(*item, new=(index >= 9))
+
+elif main_page == "نص الميثاق":
+    st.subheader("نص جاهز للنسخ")
+    objective = st.text_input(
+        "شنو هو الهدف ديالك؟",
+        value="بغيت نبني تطبيقات وكودات كتجيب ليا قيمة حقيقية، بشكل قانوني وصحيح"
+    )
+    level = st.selectbox(
+        "المستوى ديالك",
+        ["مبتدئ - بغيت الشرح بالدارجة", "متوسط - كنفهم شوية", "محترف - هضر معايا بالتقنية"]
+    )
+    rules_text = "\n".join(
+        f"{i+1} - {title.split(' - ', 1)[1]}: {body}"
+        for i, (title, body, _, _) in enumerate(RULES)
+    )
+    charter = f"""الميثاق - IMPACT
+
+سلام، هادا هو الميثاق اللي بغيت نعتمدو كإطار للعمل بيناتنا.
+الالتزام به كيبقى خاضع لقدرات الأداة وقواعد السلامة والصلاحيات المتاحة.
+
+الهدف: {objective}
+المستوى: {level}
 
 القواعد:
-
-1 - الصدق قبل السرعة: إلا ما عرفتيش، قول ما عرفتش. ما تخترعش جواب.
-2 - المصدر قبل الرأي: أي معلومة، قول ليا المصدر. إلا كانت تخمين، قول تخمين.
-3 - خطوة بخطوة: ما تعطينيش كلشي دقة وحدة. خطوة، نتأكد، عاد دوز.
-4 - التحذير قبل الخطر: إلا طلبت شي حاجة فيها خطر قانوني أو مالي أو صحي عليا، حبسني وشرح ليا الخطر قبل ما تكمل.
-5 - البديل قبل الرفض: إلا ما قدرتيش، عطيني بديل قانوني.
-6 - التبسيط بلا تسطيح: شرح بالدارجة، ولكن ما تحيدش المعلومة المهمة.
-7 - السؤال قبل التنفيذ: إلا كان طلبي غامض، سولني، ما تخمنش.
-8 - الفعل قبل الكلام: ما تتيقش في شنو كيقول الكود، تيق في شنو كيدير بالصح. قبل ما تقول تم الحفظ ولا تم الإرسال، تأكد واش الفعل وقع بالصح. سول: شنو قال؟ شنو دار؟ واش الكلام كيساوي الفعل؟ إلا قال تم الحفظ وما كاين والو تحفظ، راه كيكذب عليا. حيد ديك الرسالة.
-9 - الأرقام بلا مصدر: إلا عطيتيني شي رقم، ثمن، نسبة، ولا إحصائية، قول ليا منين جبتيه. المصدر، ولا الدراسة، ولا الرابط. إلا ما عندكش مصدر، قول ليا: هاد الرقم تخمين.
+{rules_text}
 
 كيفاش تجاوبني:
-- جاوبني بالدارجة المغربية، بسيطة.
-- بدا بالخلاصة، عاد التفاصيل.
-- إلا كان جوابك فيه كود، عطيني الكود كامل، واجد للنسخ.
-- إلا كان فيه خطر، قول ليا الخطر في الأول، قبل الحل.
+- جاوبني بالدارجة المغربية البسيطة.
+- بدا بالخلاصة، ومن بعد التفاصيل.
+- إلا كان الجواب فيه كود، عطيني نسخة كاملة قابلة للنسخ، ووضح المتطلبات وطريقة التشغيل.
+- فرّق بين اللي تأكدتي منو واللي باقي افتراض أو تخمين.
+- قبل أي تغيير ممكن يسبب فقدان بيانات أو مصاريف أو إرسال خارجي، وضح الأثر وخذ موافقتي.
+- ما تدّعيش تنفيذ عملية أو اختبار ما وقعش فعلياً.
 
-الأثر اللي بغيتو منك: ماشي كلام، ماشي كود كيبان زوين. بغيت أثر حقيقي: كود خدام، كيجيب قيمة، وكيحميني من الغلط.
+معيار النجاح:
+حل قانوني وآمن قدر الإمكان، خدام بالاختبار، وعندو قيمة حقيقية.
 
-واش قبلتي الميثاق؟ إلا قبلتيه، قول ليا: قبلت الميثاق، ونبداو.
+إلا فهمتي هاد الميثاق وتقدر تلتزم به ضمن حدودك، قول: قبلت الميثاق، ونبداو.
 """
-    st.text_area("نص الميثاق - كوبيه كامل", mithaq, height=560)
+    st.text_area("الميثاق كامل", charter, height=620)
 
 else:
-    st.markdown('<h2>ميزان التحقق v3.2 - التسجيل اليدوي</h2>', unsafe_allow_html=True)
-    st.markdown('<p>دابا الميزان ما كيسجلش بوحدو. انت اللي كتقرر واش تسجل النتيجة ولا لا.</p>', unsafe_allow_html=True)
+    st.subheader("ميزان التحقق")
+    st.caption("النتائج هنا استرشادية. ما كاين حتى فحص آلي بسيط يقدر يضمن صحة الكود أو صدق المعلومة بشكل كامل.")
 
-    def nqi_texte(t):
-        t = t.replace("'", "").replace('"', "").replace("’", "").strip()
-        t = t.replace("إ", "ا").replace("أ", "ا").replace("آ", "ا")
-        t = t.replace("ة", "ه").replace("ؤ", "و").replace("ئ", "ي")
-        return t
+    section = st.radio(
+        "اختار نوع الفحص",
+        ["فحص نحوي للكود", "مؤشرات تحقيق الشرط", "مراجعة رقم ومصدر"]
+    )
 
-    def halil_siha(code):
-        alertes = []
-        naks = 0
-        qa3ida = "ما كاين حتى غلط"
-        try:
-            tree = ast.parse(code)
-        except SyntaxError as e:
-            naks += 50
-            qa3ida = "SyntaxError - غلط في الكود"
-            alertes.append(f"غلط حقيقي في الكود - السطر {e.lineno}: {e.msg}")
-            if "unexpected indent" in str(e.msg) or "unindent" in str(e.msg):
-                alertes.append("هادا غلط ديال الفراغ - IndentationError.")
-            if "expected ':'" in str(e.msg):
-                alertes.append("ناقصة : في السطر - زيد : في اللخر ديال if ولا for ولا def")
-            if "was never closed" in str(e.msg) or "unmatched" in str(e.msg):
-                alertes.append("قوس ( ولا [ ولا { ما تسدش.")
-            return naks, alertes, qa3ida
-        m3arfin = set(dir(__builtins__))
-        m3arfin.update(["st", "streamlit", "requests", "pd", "np", "datetime", "os", "json", "time", "random"])
-        mosta3malin = set()
-        imports = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for a in node.names:
-                    imports.add((a.asname or a.name).split(".")[0])
-                    m3arfin.add((a.asname or a.name).split(".")[0])
-            elif isinstance(node, ast.ImportFrom):
-                for a in node.names:
-                    imports.add(a.asname or a.name)
-                    m3arfin.add(a.asname or a.name)
-            elif isinstance(node, ast.FunctionDef):
-                m3arfin.add(node.name)
-                for arg in node.args.args:
-                    m3arfin.add(arg.arg)
-            elif isinstance(node, ast.ClassDef):
-                m3arfin.add(node.name)
-            elif isinstance(node, ast.Assign):
-                for t in node.targets:
-                    if isinstance(t, ast.Name):
-                        m3arfin.add(t.id)
-            elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-                mosta3malin.add(node.id)
-        for nom in sorted(mosta3malin - m3arfin):
-            naks += 15
-            if qa3ida == "ما كاين حتى غلط":
-                qa3ida = f"متغير ما معرّفش - {nom}"
-            alertes.append(f"متغير ما معرّفش: {nom} - استعملتيه، ولكن ما عرّفتيهش قبل. غادي يعطيك NameError.")
-        if "requests" in mosta3malin and "import requests" not in code:
-            naks += 10
-            alertes.append("خاصك import requests - استعملتي requests.post، ولكن ما درتيش import requests.")
-        if "st." in code and "import streamlit" not in code:
-            naks += 10
-            alertes.append("خاصك import streamlit as st - استعملتي st.، ولكن ما درتيش import streamlit.")
-        if "pd." in code and "import pandas" not in code:
-            naks += 10
-            alertes.append("خاصك import pandas as pd - استعملتي pd.، ولكن ما درتيش import pandas.")
-        return naks, alertes, qa3ida
-
-    def halil_chart(code, chart):
-        alertes = []
-        naks = 0
-        qa3ida = "ما كاين حتى غلط"
-        code_nqi = nqi_texte(code)
-        chart_nqi = nqi_texte(chart)
-        talaba_hifd = any(k in chart_nqi for k in ["حفظ", "سجل", "تسجيل"])
-        talaba_irsat = any(k in chart_nqi for k in ["ارسال", "ارسل", "واتساب", "ايميل", "رسالة"])
-        talaba_daf3 = any(k in chart_nqi for k in ["دفع", "خلص", "فلوس"])
-        fi3l_hifd = any(k in code_nqi for k in ["append", "open(", "write", "save", "insert", "session_state", "ملف", "قاعدة بيانات"])
-        fi3l_irsat = any(k in code_nqi for k in ["requests.post", "wa.me", "whatsapp", "api", "send", "smtp", "ايميل"])
-        fi3l_daf3 = any(k in code_nqi for k in ["stripe", "paypal", "payment", "دفع", "api"])
-        if talaba_hifd and not fi3l_hifd:
-            naks += 40
-            qa3ida = "القاعدة 8 - الشرط ما تحققش - حفظ"
-            alertes.append("الشرط كيقول: حفظ / تسجيل، ولكن الكود ما فيه حتى فعل ديال الحفظ - لا append، لا open، لا save. الكود غير كيقول تم الحفظ.")
-        if talaba_irsat and not fi3l_irsat:
-            naks += 40
-            qa3ida = "القاعدة 8 - الشرط ما تحققش - ارسال"
-            alertes.append("الشرط كيقول: إرسال / واتساب، ولكن الكود ما فيه حتى فعل ديال الإرسال - لا requests.post، لا wa.me، لا api. الكود غير كيقول تم الإرسال.")
-        if talaba_daf3 and not fi3l_daf3:
-            naks += 40
-            qa3ida = "القاعدة 8 - الشرط ما تحققش - دفع"
-            alertes.append("الشرط كيقول: دفع، ولكن الكود ما فيه حتى فعل ديال الدفع - لا Stripe، لا PayPal، لا api.")
-        if naks == 0:
-            alertes.append("مزيان: الشرط كيبان متحقق - لقيت في الكود فعل كيطابق الشرط. تأكد بالتجربة الحقيقية.")
-        return naks, alertes, qa3ida
-
-    if 'historique' not in st.session_state:
-        st.session_state.historique = []
-    if 'pending' not in st.session_state:
-        st.session_state.pending = None
-
-    GOOGLE_URL = "https://script.google.com/macros/s/AKfycbwpjE6WNAdi9M_6V-ofbIDVKLs8Xpeb-SxL0SWDk8r5b9kFZAUAHe77GzvftGd4C_v0/exec"
-
-    def sajel(naw3, score, qa3ida):
-        import requests
-        from datetime import datetime
-        tarikh = datetime.now().strftime("%d/%m %H:%M")
-        st.session_state.historique.append({"tarikh": tarikh, "naw3": naw3, "score": score, "qa3ida": qa3ida})
-        try:
-            requests.post(GOOGLE_URL, json={"tarikh": tarikh, "naw3": naw3, "score": score, "qa3ida": qa3ida}, timeout=5)
-        except:
-            pass
-        st.session_state.pending = None
-        st.success("تسجلت! سير للتقرير باش تشوفها.")
-
-    def jib_dakira_men_google():
-        import requests
-        try:
-            r = requests.get(GOOGLE_URL, timeout=5)
-            data = r.json()
-            for h in data:
-                h["score"] = int(h["score"])
-            return data
-        except:
-            return []
-
-    page2 = st.radio("فين بغيتي تمشي؟", ["الميزان - وزن دابا", "التقرير ديالي - شوف فين كتغلط", "اقتراح القواعد - شنو خاصنا نزيدو"])
-
-    if page2 == "الميزان - وزن دابا":
-        choix = st.radio("شنو بغيتي توزن اليوم؟", ["1 - كود: فحص الصحة فقط - واش الكود صحيح؟", "2 - كود: فحص تحقيق الشرط - واش الكود كيدير داكشي اللي قلتي؟", "3 - معلومة: فحص الأرقام والمصدر"])
-
-        # بوطونة التسجيل اليدوي - كتبان إلا كانت كاينة نتيجة معلقة
-        if st.session_state.pending is not None:
-            p = st.session_state.pending
-            st.info(f"نتيجة معلقة: {p['naw3']} - {p['score']} من 100 - {p['qa3ida']}")
-            if st.button("سجل هاد النتيجة في التقرير", key="sajel_pending"):
-                sajel(p['naw3'], p['score'], p['qa3ida'])
-            if st.button("ما تسجلهاش - تجاهلها", key="tajahl_pending"):
-                st.session_state.pending = None
-                st.info("تجاهلتيها، ما تسجلت والو.")
-
-        if choix == "1 - كود: فحص الصحة فقط - واش الكود صحيح؟":
-            st.write("هنا كنفحصو غير الصحة: SyntaxError، متغير ما معرّفش، import ناقص. ما كنسولوكش على الشرط.")
-            code_a_verifier = st.text_area("الكود - لصقو هنا", height=220, placeholder="لصق هنا الكود كامل")
-            if st.button("فحص الصحة ديال الكود"):
-                if not code_a_verifier:
-                    st.warning("لصق الكود")
+    if section == "فحص نحوي للكود":
+        code_input = st.text_area("لصق كود Python هنا", height=260)
+        if st.button("فحص الكود", key="syntax_check"):
+            if not code_input.strip():
+                st.warning("لصق الكود الأول.")
+            else:
+                result = inspect_python(code_input)
+                show_status(result["status"])
+                if result["syntax_ok"]:
+                    st.success(result["summary"])
                 else:
-                    naks, alertes, qa3ida = halil_siha(code_a_verifier)
-                    score = max(0, min(100, 100 - naks))
-                    st.progress(score/100)
-                    st.write(f"نقطة الصحة: {score} من 100")
-                    for a in alertes:
-                        st.write(a)
-                    if len(alertes) == 0:
-                        st.success("الكود سليم - ما لقيت فيه حتى غلط ديال الصحة.")
-                    # ما كنسجلوش تلقائيا - كنحطوها معلقة حتى تقرر انت
-                    st.session_state.pending = {"naw3": "كود - صحة", "score": score, "qa3ida": qa3ida}
-                    st.info("ما تسجلت والو دابا. إلا بغيتي تسجل هاد النتيجة، ورك على سجل هاد النتيجة اللي الفوق.")
+                    st.error(result["summary"])
+                for warning in result["warnings"]:
+                    st.warning(warning)
+                add_pending("كود - تحليل نحوي", result["status"], "القاعدة 12 - الاختبار قبل الاعتماد", result["summary"])
+                st.info("الحالة نجح كتعني غير أن التحليل النحوي داز، ماشي أن البرنامج خدام.")
 
-        elif choix == "2 - كود: فحص تحقيق الشرط - واش الكود كيدير داكشي اللي قلتي؟":
-            st.write("هنا كنفحصو غير الشرط: واش الكود بالصح كيدير داكشي اللي قلتي، ولا غير كيقولو. القاعدة 8.")
-            code_a_verifier = st.text_area("الكود - لصقو هنا", height=200, placeholder="لصق هنا الكود كامل")
-            chart = st.text_area("الشرط - شنو خاص الكود يدير؟", height=80, placeholder="مثال: تم حفظ الزبون في قاعدة البيانات - ولا - تم إرسال الواتساب لأحمد")
-            if st.button("فحص تحقيق الشرط"):
-                if not code_a_verifier or not chart:
-                    st.warning("لصق الكود والشرط بجوج")
-                else:
-                    naks, alertes, qa3ida = halil_chart(code_a_verifier, chart)
-                    score = max(0, min(100, 100 - naks))
-                    st.progress(score/100)
-                    st.write(f"نقطة تحقيق الشرط: {score} من 100")
-                    for a in alertes:
-                        st.write(a)
-                    st.session_state.pending = {"naw3": "كود - شرط", "score": score, "qa3ida": qa3ida}
-                    st.info("ما تسجلت والو دابا. إلا بغيتي تسجلها، ورك على سجل هاد النتيجة اللي الفوق.")
+    elif section == "مؤشرات تحقيق الشرط":
+        code_input = st.text_area("الكود", height=220)
+        requirement = st.text_area("شنو خاص الكود يدير؟", height=90)
+        if st.button("حلل المؤشرات", key="requirement_check"):
+            if not code_input.strip() or not requirement.strip():
+                st.warning("دخل الكود والشرط بجوج.")
+            else:
+                results, status = inspect_requirement(code_input, requirement)
+                show_status(status)
+                for item in results:
+                    st.write("• " + item)
+                add_pending("كود - مؤشرات الشرط", status, "القاعدة 8 - الفعل قبل الكلام", "تحليل نصي فقط؛ خاص اختبار فعلي.")
+                st.info("ما عطيناش نجح ولا فشل نهائي لأن وجود كلمة فالكود ما كيثبتش وقوع الفعل.")
 
-        else:
-            question = st.text_area("السؤال - لصقو هنا", height=80, placeholder="مثال: شحال كيسوى هاد المنتوج؟")
-            reponse_info = st.text_area("الجواب - لصقو هنا", height=200, placeholder="لصق هنا الجواب كامل")
-            if st.button("وزن ليا هاد المعلومة"):
-                if not question or not reponse_info:
-                    st.warning("لصق السؤال والجواب بجوج")
-                else:
-                    reponse_nqi = nqi_texte(question + "\n" + reponse_info)
-                    score = 100
-                    alertes = []
-                    qa3ida = "ما كاين حتى غلط"
-                    fih_raqm = any(c.isdigit() for c in reponse_nqi)
-                    fih_masdar = "مصدر" in reponse_nqi or "http" in reponse_nqi or "حسب" in reponse_nqi or "دراسة" in reponse_nqi
-                    if fih_raqm and not fih_masdar:
-                        score -= 30
-                        qa3ida = "القاعدة 9 - ارقام بلا مصدر"
-                        alertes.append("القاعدة 9 - خطر الأرقام: عطاك أرقام، ولكن ما عطاكش المصدر ديالهم. سولو: منين جبتي هاد الرقم؟")
-                    if "متاكد 100" in reponse_nqi and not fih_masdar:
-                        score -= 20
-                        alertes.append("كيقول أكيد 100% بلا مصدر")
-                    if "كل الناس" in reponse_nqi or "جميع" in reponse_nqi:
-                        score -= 10
-                        if qa3ida == "ما كاين حتى غلط":
-                            qa3ida = "كلام كبير - كل الناس"
-                        alertes.append("كيقول كل الناس ولا جميع - هاد الكلام الكبير غالبا ما كيكونش صحيح 100%")
-                    if "ما عرفتش" in reponse_nqi or "ممكن" in reponse_nqi:
-                        score += 10
-                        alertes.append("قال ما عرفتش ولا ممكن - علامة ديال الصدق")
-                    score = max(0, min(100, score))
-                    st.progress(score/100)
-                    st.write(f"نقطة الثقة: {score} من 100")
-                    for a in alertes:
-                        st.write(a)
-                    st.session_state.pending = {"naw3": "معلومة", "score": score, "qa3ida": qa3ida}
-                    st.info("ما تسجلت والو دابا. إلا بغيتي تسجلها، ورك على سجل هاد النتيجة اللي الفوق.")
-
-    elif page2 == "التقرير ديالي - شوف فين كتغلط":
-        st.markdown('<h3>التقرير ديالي</h3>', unsafe_allow_html=True)
-        hist = jib_dakira_men_google()
-        if len(hist) > 0:
-            st.session_state.historique = hist
-            st.success("الذاكرة رجعات من Google! شوف التقرير لتحت")
-        else:
-            hist = st.session_state.historique
-        if len(hist) == 0:
-            st.write("ما زال ما سجلتي والو. سير للميزان، وزن شي حاجة، وورك سجل هاد النتيجة.")
-        else:
-            total = len(hist)
-            moyenne = sum([int(h["score"]) for h in hist]) / total
-            st.write(f"شحال من مرة وزنتي؟ {total} مرة")
-            st.write(f"النقطة المتوسطة ديالك: {int(moyenne)} من 100")
-            st.progress(int(moyenne)/100)
-            from collections import Counter
-            c = Counter([h["qa3ida"] for h in hist])
-            st.write("أكثر قاعدة كتطيح فيها:")
-            for k, v in c.most_common():
-                st.write(f"- {k} : {v} مرة")
-            st.write("---")
-            st.write("التاريخ ديال التجارب:")
-            for h in reversed(hist):
-                st.write(f"{h['tarikh']} - {h['naw3']} - {h['score']} - {h['qa3ida']}")
-            if st.button("مسح الذاكرة كاملة"):
-                st.session_state.historique = []
-                st.success("تمسحات الذاكرة.")
     else:
-        st.markdown('<h3>اقتراح القواعد</h3>', unsafe_allow_html=True)
-        hist = jib_dakira_men_google()
-        if len(hist) == 0:
-            hist = st.session_state.historique
-        if len(hist) == 0:
-            st.write("ما زال ما كاين والو باش نقترح عليك. سجل 3 ديال التجارب على الأقل.")
+        question = st.text_area("السؤال أو الادعاء اللي بغيتي تتحقق منو")
+        answer = st.text_area("الجواب اللي عطاه الذكاء الاصطناعي")
+        if st.button("راجع الأرقام والمصادر", key="number_check"):
+            if not question.strip() or not answer.strip():
+                st.warning("دخل السؤال والجواب.")
+            else:
+                numbers = re.findall(r"(?<!\w)\d+(?:[.,]\d+)?%?", answer)
+                has_link = bool(re.search(r"https?://|www\.", answer))
+                has_source_words = any(x in normalize_arabic(answer) for x in ["مصدر", "دراسه", "حسب", "تقرير", "مرجع"])
+                if numbers:
+                    st.write("الأرقام اللي لقيت:", ", ".join(numbers))
+                    if not (has_link or has_source_words):
+                        show_status("فشل")
+                        st.error("كاينين أرقام وما بانش مصدر واضح فالنص. طلب المصدر والتاريخ والوحدة.")
+                        status_num = "فشل"
+                    else:
+                        show_status("خاص اختبار")
+                        st.warning("بانت إشارة لمصدر، ولكن خاص التحقق واش المصدر حقيقي وكيدعم الرقم.")
+                        status_num = "خاص اختبار"
+                else:
+                    show_status("خاص اختبار")
+                    st.info("ما لقيتش أرقام واضحة فالنص.")
+                    status_num = "خاص اختبار"
+                add_pending("معلومة - مراجعة أولية", status_num, "القاعدة 2 و9 - المصدر والأرقام", "الفحص النصي ما تحققش من صحة المصدر.")
+
+    st.divider()
+    st.subheader("تسجيل النتيجة")
+    pending = st.session_state.pending
+    if pending:
+        st.write(f"النتيجة المعلقة: {pending['kind']} — الحالة: {pending['status']}")
+        show_status(pending["status"])
+        st.write(pending["details"])
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("سجل محلياً"):
+                st.session_state.history.append(pending)
+                st.session_state.pending = None
+                st.success("تسجلات فالجلسة الحالية فقط.")
+        with col2:
+            if st.button("حاول التسجيل في Google"):
+                ok, message = save_to_google(pending)
+                if ok:
+                    st.session_state.history.append(pending)
+                    st.session_state.pending = None
+                    st.success("الخادم أكد نجاح الطلب: " + message)
+                else:
+                    st.error(message)
+                    st.warning("ما تسجلاتش فاللائحة المحلية على أساس أنها محفوظة في Google.")
+        if st.button("تجاهل النتيجة"):
+            st.session_state.pending = None
+            st.info("تم تجاهل النتيجة؛ ما تسجلاتش.")
+
+    st.divider()
+    st.subheader("التقرير")
+    if st.button("جلب السجل من Google"):
+        records, error = load_from_google()
+        if error:
+            st.error(error)
         else:
-            from collections import Counter
-            c = Counter([h["qa3ida"] for h in hist])
-            lqit_iktir7 = False
-            for k, v in c.items():
-                if v >= 3 and k != "ما كاين حتى غلط":
-                    lqit_iktir7 = True
-                    st.warning(f"لاحظت باللي طحتي {v} مرات في: {k}")
-                    st.write(f"واش بغيتي نزيدو قاعدة جديدة باش تحميك من: {k} ؟")
-                    st.write("إلا بغيتي، قول ليا: إيه، زيدها، وغادي نزيدوها للميثاق.")
-            if not lqit_iktir7:
-                st.success("ما كاين حتى غلط تكرر 3 مرات. مزيان، كتحسن!")
-                st.write("ملي يولي شي غلط كيتكرر 3 مرات، غادي نقترح عليك قاعدة جديدة هنا.")
+            st.session_state.history = records
+            st.success(f"تم جلب {len(records)} سجل من الخادم.")
+
+    history = st.session_state.history
+    if history:
+        st.write(f"عدد السجلات فهاد الجلسة/آخر تحميل: {len(history)}")
+        # بلا متوسط - المتوسط ديال حالات ماشي أرقام
+        from collections import Counter
+        c = Counter([r.get("status", r.get("score", "?")) if isinstance(r, dict) else "?" for r in history])
+        st.write("توزيع الحالات:")
+        for k, v in c.items():
+            st.write(f"- {k} : {v} مرة")
+        for row in reversed(history):
+            if isinstance(row, dict):
+                status_txt = row.get("status", row.get("score", ""))
+                st.write(
+                    f"{row.get('date', row.get('tarikh', 'بلا تاريخ'))} | "
+                    f"{row.get('kind', row.get('naw3', ''))} | "
+                    f"الحالة: {status_txt} | "
+                    f"{row.get('rule', row.get('qa3ida', ''))}"
+                )
+        if st.button("مسح سجل هاد الجلسة"):
+            st.session_state.history = []
+            st.success("تم مسح السجل المحلي من هاد الجلسة فقط. بيانات Google ما تمسحاتش.")
+    else:
+        st.caption("ما كاين حتى سجل محلي محمّل دابا.")
+
+st.divider()
+st.caption("IMPACT — ما نعتابروش النتيجة مؤكدة حتى يكون عندنا دليل مناسب.")
