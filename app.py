@@ -1,4 +1,5 @@
 import streamlit as st
+import ast
 
 st.set_page_config(page_title="الميثاق", page_icon="📜", layout="centered")
 
@@ -134,14 +135,82 @@ elif page == "نص الميثاق":
     st.text_area("نص الميثاق - كوبيه كامل", mithaq, height=560)
 
 else:
-    st.markdown('<h2>ميزان التحقق v2.0</h2>', unsafe_allow_html=True)
-    st.markdown('<p>دابا الميزان كيعقل. وزن، سجل، وشوف التقرير ديالك.</p>', unsafe_allow_html=True)
+    st.markdown('<h2>ميزان التحقق v3.0 - دابا كيكشف الأخطاء بالصح</h2>', unsafe_allow_html=True)
+    st.markdown('<p>دابا الميزان كيجرب الكود، ماشي غير كيقرا الكلام ديالو.</p>', unsafe_allow_html=True)
 
     def nqi_texte(t):
         t = t.replace("'", "").replace('"', "").replace("’", "").strip()
         t = t.replace("إ", "ا").replace("أ", "ا").replace("آ", "ا")
         t = t.replace("ة", "ه").replace("ؤ", "و").replace("ئ", "ي")
         return t
+
+    def halil_code(code):
+        # كيرجع: score_naks, alertes, qa3ida
+        alertes = []
+        naks = 0
+        qa3ida = "ما كاين حتى غلط"
+        try:
+            tree = ast.parse(code)
+        except SyntaxError as e:
+            naks += 50
+            qa3ida = "SyntaxError - غلط في الكود"
+            alertes.append(f"غلط حقيقي في الكود - السطر {e.lineno}: {e.msg}")
+            if "unexpected indent" in str(e.msg) or "unindent" in str(e.msg):
+                alertes.append("هادا غلط ديال الفراغ - IndentationError. بحال اللي وقع لينا قبيلة.")
+            if "expected ':'" in str(e.msg):
+                alertes.append("ناقصة : في السطر - زيد : في اللخر ديال if ولا for ولا def")
+            if "was never closed" in str(e.msg) or "unmatched" in str(e.msg):
+                alertes.append("قوس ( ولا [ ولا { ما تسدش. قلب على القوس الناقص.")
+            return naks, alertes, qa3ida
+
+        # جمع الأسماء المعرفة والمستعملة
+        m3arfin = set(dir(__builtins__))
+        m3arfin.update(["st", "streamlit", "requests", "pd", "np", "datetime", "os", "json", "time", "random"])
+        mosta3malin = set()
+        imports = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for a in node.names:
+                    imports.add((a.asname or a.name).split(".")[0])
+                    m3arfin.add((a.asname or a.name).split(".")[0])
+            elif isinstance(node, ast.ImportFrom):
+                for a in node.names:
+                    imports.add(a.asname or a.name)
+                    m3arfin.add(a.asname or a.name)
+            elif isinstance(node, ast.FunctionDef):
+                m3arfin.add(node.name)
+                for arg in node.args.args:
+                    m3arfin.add(arg.arg)
+            elif isinstance(node, ast.ClassDef):
+                m3arfin.add(node.name)
+            elif isinstance(node, ast.Assign):
+                for t in node.targets:
+                    if isinstance(t, ast.Name):
+                        m3arfin.add(t.id)
+            elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+                mosta3malin.add(node.id)
+
+        # متغيرات ما معرّفاش
+        for nom in sorted(mosta3malin - m3arfin):
+            naks += 15
+            if qa3ida == "ما كاين حتى غلط":
+                qa3ida = f"متغير ما معرّفش - {nom}"
+            alertes.append(f"متغير ما معرّفش: {nom} - استعملتيه، ولكن ما عرّفتيهش قبل. غادي يعطيك NameError.")
+
+        # import ناقص
+        if "requests" in mosta3malin and "requests" not in imports and "requests" not in code.split("import requests")[0]:
+            # إلا ما كاينش import requests في الكود
+            if "import requests" not in code:
+                naks += 10
+                alertes.append("خاصك import requests - استعملتي requests.post، ولكن ما درتيش import requests في الأول.")
+        if "st." in code and "import streamlit" not in code:
+            naks += 10
+            alertes.append("خاصك import streamlit as st - استعملتي st.، ولكن ما درتيش import streamlit.")
+        if "pd." in code and "import pandas" not in code:
+            naks += 10
+            alertes.append("خاصك import pandas as pd - استعملتي pd.، ولكن ما درتيش import pandas.")
+
+        return naks, alertes, qa3ida
 
     if 'historique' not in st.session_state:
         st.session_state.historique = []
@@ -174,7 +243,7 @@ else:
     if page2 == "الميزان - وزن دابا":
         choix = st.radio("شنو بغيتي توزن اليوم؟", ["كود - بغيت نتحقق من كود", "معلومة - بغيت نتحقق من معلومة"])
         if choix == "كود - بغيت نتحقق من كود":
-            code_a_verifier = st.text_area("الكود - لصقو هنا", height=200, placeholder="لصق هنا الكود كامل")
+            code_a_verifier = st.text_area("الكود - لصقو هنا", height=200, placeholder="لصق هنا الكود كامل - مثلا كود Python")
             reponse = st.text_area("جملة التحقق - لصقها هنا", height=100, placeholder="مثال: تم إرسال الواتساب لأحمد بنجاح")
             if st.button("وزن ليا هاد الكود وسجلها"):
                 if not code_a_verifier or not reponse:
@@ -184,6 +253,15 @@ else:
                     score = 100
                     alertes = []
                     qa3ida = "ما كاين حتى غلط"
+
+                    # 1 - كشف حقيقي - SyntaxError + متغيرات + import
+                    naks_haqiqi, alertes_haqiqi, qa3ida_haqiqi = halil_code(code_a_verifier)
+                    score -= naks_haqiqi
+                    alertes.extend(alertes_haqiqi)
+                    if qa3ida_haqiqi != "ما كاين حتى غلط":
+                        qa3ida = qa3ida_haqiqi
+
+                    # 2 - القاعدة 8 - تم بلا فعل
                     if "متاكد 100" in reponse_nqi and "مصدر" not in reponse_nqi:
                         score -= 20
                         alertes.append("كيقول أكيد بلا مصدر")
@@ -193,15 +271,19 @@ else:
                     kayn_dalil = any(d in reponse_nqi for d in dalil_fi3l)
                     if lqa_kadab and not kayn_dalil:
                         score -= 30
-                        qa3ida = "القاعدة 8 - تم بلا فعل"
+                        if qa3ida == "ما كاين حتى غلط":
+                            qa3ida = "القاعدة 8 - تم بلا فعل"
                         alertes.append("القاعدة 8 - خطر: كيقول تم الحفظ ولا تم الإرسال، ولكن ما فيه حتى فعل حقيقي.")
                     elif lqa_kadab and kayn_dalil:
                         alertes.append("القاعدة 8 - مزيان: قال تم، وكاين دليل على الفعل. تأكد بالتجربة.")
+
                     score = max(0, min(100, score))
                     st.progress(score/100)
                     st.write(f"نقطة الثقة: {score} من 100")
                     for a in alertes:
                         st.write(a)
+                    if len(alertes) == 0:
+                        st.success("الكود سليم - ما لقيت فيه حتى غلط حقيقي.")
                     sajel("كود", score, qa3ida)
                     st.success("تسجلت تلقائيا في الذاكرة! سير للتقرير باش تشوفها.")
         else:
