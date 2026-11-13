@@ -285,17 +285,7 @@ if len(hist) == 0:
             for h in reversed(hist):
                 st.write(f"{h['tarikh']} - {h['naw3']} - {h['score']} - {h['qa3ida']}")
 
-            # --- حفظ الذاكرة في ملف - هادي هي الذاكرة الدائمة ---
-            st.write("---")
-            st.write("قبل ما تخرج، حفظ الذاكرة:")
-            import pandas as pd
-            df = pd.DataFrame(hist)
-            csv_data = df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="حفظ الذاكرة في ملف - ورك هنا قبل ما تخرج",
-                data=csv_data,
-                file_name="ذاكرة_الميزان.csv",
-                mime="text/csv"
+            
             )
             st.write("هاد الملف هو الذاكرة ديالك. خليه في التيليفون، ما تمسحوش.")
 
