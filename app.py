@@ -260,22 +260,12 @@ def jib_dakira_men_google():
     # =====================================================
     elif page == "التقرير ديالي - شوف فين كتغلط":
         st.markdown('<h3>التقرير ديالي</h3>', unsafe_allow_html=True)
-        hist = st.session_state.historique
-
-        # --- استرجاع الذاكرة من ملف ---
-        st.write("إلا خرجتي ورجعتي، رجع الذاكرة من هنا:")
-        fichier = st.file_uploader("رجع الذاكرة من الملف - اختار ملف ذاكرة_الميزان.csv", type=["csv"])
-        if fichier is not None:
-            import pandas as pd
-            df_upload = pd.read_csv(fichier)
-            # نحولو الداتا ديال الملف لذاكرة
-            st.session_state.historique = df_upload.to_dict("records")
-            # نصلحو النقطة باش تولي رقم
-            for h in st.session_state.historique:
-                h["score"] = int(h["score"])
-            hist = st.session_state.historique
-            st.success("رجعات الذاكرة! شوف التقرير لتحت.")
-
+        hist = jib_dakira_men_google()
+if len(hist) > 0:
+    st.session_state.historique = hist
+    st.success("الذاكرة رجعات من Google! شوف التقرير لتحت")
+else:
+    hist = st.session_state.historique
         if len(hist) == 0:
             st.write("ما زال ما سجلتي والو. سير للميزان، وزن شي حاجة.")
         else:
