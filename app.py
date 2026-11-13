@@ -134,124 +134,157 @@ elif page == "نص الميثاق":
     st.text_area("نص الميثاق - كوبيه كامل", mithaq, height=520)
 
 else:
-    st.markdown('<h2>ميزان التحقق</h2>', unsafe_allow_html=True)
-    st.markdown('<p>ملي الأداة تجاوبك، اختار شنو بغيتي توزن: كود ولا معلومة؟</p>', unsafe_allow_html=True)
+    st.markdown('<h2>ميزان التحقق v2.0</h2>', unsafe_allow_html=True)
+    st.markdown('<p>دابا الميزان كيعقل. وزن، سجل، وشوف التقرير ديالك.</p>', unsafe_allow_html=True)
 
-    # ===== الإصلاح: تنقية الحروف العربية =====
+    # ===== تنقية الحروف =====
     def nqi_texte(t):
         t = t.replace("'", "").replace('"', "").replace("’", "").strip()
         t = t.replace("إ", "ا").replace("أ", "ا").replace("آ", "ا")
         t = t.replace("ة", "ه").replace("ؤ", "و").replace("ئ", "ي")
         return t
 
-    # ===== الاختيار: كود ولا معلومة =====
-    choix = st.radio("شنو بغيتي توزن اليوم؟", ["كود - بغيت نتحقق من كود", "معلومة - بغيت نتحقق من معلومة"])
+    # ===== الخطوة 1 - الذاكرة =====
+    if 'historique' not in st.session_state:
+        st.session_state.historique = []
+
+    def sajel(naw3, score, qa3ida):
+        import datetime
+        st.session_state.historique.append({
+            "tarikh": datetime.datetime.now().strftime("%d/%m %H:%M"),
+            "naw3": naw3,
+            "score": score,
+            "qa3ida": qa3ida
+        })
+
+    # ===== التنقل بين الصفحات =====
+    page = st.radio("فين بغيتي تمشي؟", ["الميزان - وزن دابا", "التقرير ديالي - شوف فين كتغلط", "اقتراح القواعد - شنو خاصنا نزيدو"])
 
     # =====================================================
-    # القسم 1 - التحقق من الكود
+    # الصفحة 1 - الميزان
     # =====================================================
-    if choix == "كود - بغيت نتحقق من كود":
-        st.markdown('<h3>1 - لصق الكود اللي بغيتي تتحقق منو</h3>', unsafe_allow_html=True)
-        code_a_verifier = st.text_area("الكود - لصقو هنا", height=200, placeholder="لصق هنا الكود كامل")
-        st.markdown('<h3>2 - لصق الجملة اللي قالها ليك الكود</h3>', unsafe_allow_html=True)
-        reponse = st.text_area("جملة التحقق - لصقها هنا", height=100, placeholder="مثال: تم إرسال الواتساب لأحمد بنجاح")
+    if page == "الميزان - وزن دابا":
+        choix = st.radio("شنو بغيتي توزن اليوم؟", ["كود - بغيت نتحقق من كود", "معلومة - بغيت نتحقق من معلومة"])
 
-        if st.button("وزن ليا هاد الكود"):
-            if not code_a_verifier or not reponse:
-                st.warning("لصق الكود والجملة بجوج")
-            else:
-                texte_complet = code_a_verifier + "\n" + reponse
-                reponse_nqi = nqi_texte(texte_complet)
-                score = 100
-                alertes = []
-
-                if "متاكد 100" in reponse_nqi and "مصدر" not in reponse_nqi:
-                    score -= 20
-                    alertes.append("كيقول أكيد بلا مصدر - هادي علامة ديال التخمين")
-                if "بالتاكيد" in reponse_nqi:
-                    score -= 10
-                    alertes.append("كلمة بالتأكيد بلا دليل")
-
-                # القاعدة 8 - الفعل قبل الكلام
-                kalam_kadab = ["تم حفظ", "تم الحفظ", "تم ارسال", "تم الارسال", "تم الدفع", "تم بنجاح", "تم حفظ الزبون", "تم ارسال الرسالة", "تم ارسال الواتساب"]
-                lqa_kadab = any(k in reponse_nqi for k in kalam_kadab)
-                dalil_fi3l = ["session_state", "append", "open(", "write", "save", "insert", "ملف", "قاعدة بيانات", "تحقق", "نتاكد", "تجربة", "جرب", "wa.me", "whatsapp", "api", "requests.post", "send"]
-                kayn_dalil = any(d in reponse_nqi for d in dalil_fi3l)
-
-                if lqa_kadab and not kayn_dalil:
-                    score -= 30
-                    alertes.append("القاعدة 8 - خطر: كيقول تم الحفظ ولا تم الإرسال، ولكن الكود اللي لصقتي ما فيه حتى فعل حقيقي. غير كلام. سولو: فين هو الكود ديال الحفظ ولا الإرسال؟")
-                elif lqa_kadab and kayn_dalil:
-                    alertes.append("القاعدة 8 - مزيان: قال تم الحفظ، وكاين دليل على الفعل في الكود. تأكد بالتجربة قبل ما تتيق 100%.")
-
-                score = max(0, min(100, score))
-                st.progress(score/100)
-                st.write(f"نقطة الثقة: {score} من 100")
-                if score >= 80:
-                    st.success("الكود باين مزيان. جربو بتجربة صغيرة قبل ما تتيق فيه 100%.")
-                elif score >= 60:
-                    st.warning("الكود فيه شك. سول الأداة: فين هو الدليل؟")
+        # --- قسم الكود ---
+        if choix == "كود - بغيت نتحقق من كود":
+            code_a_verifier = st.text_area("الكود - لصقو هنا", height=200, placeholder="لصق هنا الكود كامل")
+            reponse = st.text_area("جملة التحقق - لصقها هنا", height=100, placeholder="مثال: تم إرسال الواتساب لأحمد بنجاح")
+            if st.button("وزن ليا هاد الكود"):
+                if not code_a_verifier or not reponse:
+                    st.warning("لصق الكود والجملة بجوج")
                 else:
-                    st.error("الكود فيه خطر. ما تتيقش فيه.")
-                for a in alertes:
-                    st.write(a)
+                    reponse_nqi = nqi_texte(code_a_verifier + "\n" + reponse)
+                    score = 100
+                    alertes = []
+                    qa3ida = "ما كاين حتى غلط"
+                    if "متاكد 100" in reponse_nqi and "مصدر" not in reponse_nqi:
+                        score -= 20
+                        alertes.append("كيقول أكيد بلا مصدر")
+                    kalam_kadab = ["تم حفظ", "تم الحفظ", "تم ارسال", "تم الارسال", "تم الدفع", "تم بنجاح", "تم حفظ الزبون", "تم ارسال الرسالة", "تم ارسال الواتساب"]
+                    lqa_kadab = any(k in reponse_nqi for k in kalam_kadab)
+                    dalil_fi3l = ["session_state", "append", "open(", "write", "save", "insert", "ملف", "قاعدة بيانات", "تحقق", "نتاكد", "تجربة", "جرب", "wa.me", "whatsapp", "api", "requests.post", "send"]
+                    kayn_dalil = any(d in reponse_nqi for d in dalil_fi3l)
+                    if lqa_kadab and not kayn_dalil:
+                        score -= 30
+                        qa3ida = "القاعدة 8 - تم بلا فعل"
+                        alertes.append("القاعدة 8 - خطر: كيقول تم الحفظ ولا تم الإرسال، ولكن ما فيه حتى فعل حقيقي.")
+                    elif lqa_kadab and kayn_dalil:
+                        alertes.append("القاعدة 8 - مزيان: قال تم، وكاين دليل على الفعل. تأكد بالتجربة.")
+                    score = max(0, min(100, score))
+                    st.progress(score/100)
+                    st.write(f"نقطة الثقة: {score} من 100")
+                    for a in alertes:
+                        st.write(a)
+                    # زر التسجيل - الذاكرة
+                    if st.button("سجل هاد النتيجة في الذاكرة"):
+                        sajel("كود", score, qa3ida)
+                        st.success("تسجلت! سير للتقرير باش تشوفها.")
+
+        # --- قسم المعلومة ---
+        else:
+            question = st.text_area("السؤال - لصقو هنا", height=80, placeholder="مثال: شحال كيسوى هاد المنتوج؟")
+            reponse_info = st.text_area("الجواب - لصقو هنا", height=200, placeholder="لصق هنا الجواب كامل")
+            if st.button("وزن ليا هاد المعلومة"):
+                if not question or not reponse_info:
+                    st.warning("لصق السؤال والجواب بجوج")
+                else:
+                    reponse_nqi = nqi_texte(question + "\n" + reponse_info)
+                    score = 100
+                    alertes = []
+                    qa3ida = "ما كاين حتى غلط"
+                    fih_raqm = any(c.isdigit() for c in reponse_nqi)
+                    fih_masdar = "مصدر" in reponse_nqi or "http" in reponse_nqi or "حسب" in reponse_nqi or "دراسة" in reponse_nqi
+                    if fih_raqm and not fih_masdar:
+                        score -= 30
+                        qa3ida = "القاعدة 9 - ارقام بلا مصدر"
+                        alertes.append("القاعدة 9 - خطر الأرقام: عطاك أرقام، ولكن ما عطاكش المصدر ديالهم. سولو: منين جبتي هاد الرقم؟")
+                    if "متاكد 100" in reponse_nqi and not fih_masdar:
+                        score -= 20
+                        alertes.append("كيقول أكيد 100% بلا مصدر")
+                    if "كل الناس" in reponse_nqi or "جميع" in reponse_nqi:
+                        score -= 10
+                        if qa3ida == "ما كاين حتى غلط":
+                            qa3ida = "كلام كبير - كل الناس"
+                        alertes.append("كيقول كل الناس ولا جميع - هاد الكلام الكبير غالبا ما كيكونش صحيح 100%")
+                    if "ما عرفتش" in reponse_nqi or "ممكن" in reponse_nqi:
+                        score += 10
+                        alertes.append("قال ما عرفتش ولا ممكن - علامة ديال الصدق")
+                    score = max(0, min(100, score))
+                    st.progress(score/100)
+                    st.write(f"نقطة الثقة: {score} من 100")
+                    for a in alertes:
+                        st.write(a)
+                    if st.button("سجل هاد النتيجة في الذاكرة"):
+                        sajel("معلومة", score, qa3ida)
+                        st.success("تسجلت! سير للتقرير باش تشوفها.")
 
     # =====================================================
-    # القسم 2 - التحقق من المعلومة - الجديد
+    # الصفحة 2 - التقرير - الخطوة 2
+    # =====================================================
+    elif page == "التقرير ديالي - شوف فين كتغلط":
+        st.markdown('<h3>التقرير ديالي</h3>', unsafe_allow_html=True)
+        hist = st.session_state.historique
+        if len(hist) == 0:
+            st.write("ما زال ما سجلتي والو. سير للميزان، وزن شي حاجة، وورك على سجل هاد النتيجة.")
+        else:
+            total = len(hist)
+            moyenne = sum([h["score"] for h in hist]) / total
+            st.write(f"شحال من مرة وزنتي؟ {total} مرة")
+            st.write(f"النقطة المتوسطة ديالك: {int(moyenne)} من 100")
+            st.progress(int(moyenne)/100)
+            # أكثر قاعدة كتطيح فيها
+            from collections import Counter
+            c = Counter([h["qa3ida"] for h in hist])
+            st.write("أكثر قاعدة كتطيح فيها:")
+            for k, v in c.most_common():
+                st.write(f"- {k} : {v} مرة")
+            st.write("---")
+            st.write("التاريخ ديال التجارب:")
+            for h in reversed(hist):
+                st.write(f"{h['tarikh']} - {h['naw3']} - {h['score']} - {h['qa3ida']}")
+            if st.button("مسح الذاكرة كاملة"):
+                st.session_state.historique = []
+                st.success("تمسحات الذاكرة.")
+
+    # =====================================================
+    # الصفحة 3 - اقتراح القواعد - الخطوة 3
     # =====================================================
     else:
-        st.markdown('<h3>1 - شنو هو السؤال اللي سولتي؟</h3>', unsafe_allow_html=True)
-        question = st.text_area("السؤال - لصقو هنا", height=80, placeholder="مثال: شحال كيسوى هاد المنتوج في المغرب؟")
-        st.markdown('<h3>2 - شنو هو الجواب اللي عطاك AI؟</h3>', unsafe_allow_html=True)
-        reponse_info = st.text_area("الجواب - لصقو هنا", height=200, placeholder="لصق هنا الجواب كامل اللي عطاك AI")
-
-        if st.button("وزن ليا هاد المعلومة"):
-            if not question or not reponse_info:
-                st.warning("لصق السؤال والجواب بجوج")
-            else:
-                texte_info = question + "\n" + reponse_info
-                reponse_nqi = nqi_texte(texte_info)
-                score = 100
-                alertes = []
-
-                # القاعدة 9 - الأرقام بلا مصدر
-                # إلا لقى رقم وفيه % ولا درهم ولا DH، وما كاينش مصدر
-                fih_raqm = any(c.isdigit() for c in reponse_nqi)
-                fih_masdar = "مصدر" in reponse_nqi or "http" in reponse_nqi or "حسب" in reponse_nqi or "دراسة" in reponse_nqi
-                if fih_raqm and not fih_masdar:
-                    score -= 30
-                    alertes.append("القاعدة 9 - خطر الأرقام: عطاك أرقام ونسب، ولكن ما عطاكش المصدر ديالهم. سولو: منين جبتي هاد الرقم؟ واش متأكد منو؟")
-
-                # الكلام المطلق بلا دليل
-                if "متاكد 100" in reponse_nqi and not fih_masdar:
-                    score -= 20
-                    alertes.append("كيقول أكيد 100% بلا مصدر - هادي علامة ديال التخمين")
-                if "بالتاكيد" in reponse_nqi and not fih_masdar:
-                    score -= 10
-                    alertes.append("كلمة بالتأكيد بلا دليل - طلب منو المصدر")
-                if "كل الناس" in reponse_nqi or "جميع" in reponse_nqi:
-                    score -= 10
-                    alertes.append("كيقول كل الناس ولا جميع - هاد الكلام الكبير غالبا ما كيكونش صحيح 100%")
-
-                # الجواب الطويل بلا خطوات
-                if len(reponse_nqi) > 2000 and "خطوة" not in reponse_nqi and "1." not in reponse_nqi:
-                    score -= 15
-                    alertes.append("جواب طويل بلا خطوات - ممكن يكون فيه غلط مخبي")
-
-                # علامة الصدق
-                if "ما عرفتش" in reponse_nqi or "ممكن" in reponse_nqi or "على حسب" in reponse_nqi:
-                    score += 10
-                    alertes.append("قال ما عرفتش ولا ممكن - هادي علامة ديال الصدق، مزيان")
-
-                score = max(0, min(100, score))
-                st.progress(score/100)
-                st.write(f"نقطة الثقة: {score} من 100")
-                if score >= 80:
-                    st.success("المعلومة باينة مزيانة. وخا هكاك، تأكد من المصدر قبل ما تستعملها في الفلوس.")
-                elif score >= 60:
-                    st.warning("المعلومة فيها شك. سول الأداة: منين جبتي هاد المعلومة؟ واش عندك مصدر؟")
-                else:
-                    st.error("المعلومة فيها خطر. ما تستعملهاش، وما تبنيش عليها قرار ديال الفلوس.")
-                for a in alertes:
-                    st.write(a)
-st.caption("الميثاق - IMPACT v1.1 | عهدك مع أي أداة ذكاء اصطناعي | 8 ديال القواعد")
+        st.markdown('<h3>اقتراح القواعد</h3>', unsafe_allow_html=True)
+        hist = st.session_state.historique
+        if len(hist) == 0:
+            st.write("ما زال ما كاين والو باش نقترح عليك. سجل 3 ديال التجارب على الأقل.")
+        else:
+            from collections import Counter
+            c = Counter([h["qa3ida"] for h in hist])
+            lqit_iktir7 = False
+            for k, v in c.items():
+                if v >= 3 and k != "ما كاين حتى غلط":
+                    lqit_iktir7 = True
+                    st.warning(f"لاحظت باللي طحتي {v} مرات في: {k}")
+                    st.write(f"واش بغيتي نزيدو قاعدة جديدة باش تحميك من: {k} ؟")
+                    st.write("إلا بغيتي، قول ليا: إيه، زيدها، وغادي نزيدوها للميثاق.")
+            if not lqit_iktir7:
+                st.success("ما كاين حتى غلط تكرر 3 مرات. مزيان، كتحسن!")
+                st.write("ملي يولي شي غلط كيتكرر 3 مرات، غادي نقترح عليك قاعدة جديدة هنا.")
