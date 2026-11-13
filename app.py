@@ -137,36 +137,38 @@ else:
     st.markdown('<h2>ميزان التحقق</h2>', unsafe_allow_html=True)
     st.markdown('<p>ملي الأداة تجاوبك، ما تلصقش غير الجملة. لصق الكود، ولصق الجملة اللي قالها ليك، باش الميزان يعرف القصة كاملة.</p>', unsafe_allow_html=True)
 
-    # ===== الجزء الجديد - 1: الكود =====
     st.markdown('<h3>1 - لصق الكود اللي بغيتي تتحقق منو</h3>', unsafe_allow_html=True)
-    st.markdown('<p>لصق هنا الكود كامل، اللي كتقول باللي كيدير شي حاجة - بحال كود الواتساب، ولا كود الحفظ.</p>', unsafe_allow_html=True)
-    code_a_verifier = st.text_area("الكود - لصقو هنا", height=200, placeholder="مثال:\nif st.button('صيفط الواتساب'):\n    st.success('تم إرسال الواتساب بنجاح')")
+    code_a_verifier = st.text_area("الكود - لصقو هنا", height=200, placeholder="لصق هنا الكود كامل")
 
-    # ===== الجزء الجديد - 2: الجملة =====
     st.markdown('<h3>2 - لصق الجملة اللي قالها ليك الكود</h3>', unsafe_allow_html=True)
-    st.markdown('<p>لصق هنا النتيجة اللي بانات ليك في الشاشة - بحال: تم إرسال الواتساب لأحمد بنجاح</p>', unsafe_allow_html=True)
     reponse = st.text_area("جملة التحقق - لصقها هنا", height=100, placeholder="مثال: تم إرسال الواتساب لأحمد بنجاح")
 
     if st.button("وزن ليا هاد الجواب"):
-        # إلا ما كاينش الكود ولا الجملة، نحبسوه
         if not code_a_verifier and not reponse:
             st.warning("لصق الكود والجملة الأول")
         elif not code_a_verifier:
-            st.warning("نسيتي الكود. لصق الكود اللي بغيتي تتحقق منو في الخانة الأولى.")
+            st.warning("نسيتي الكود. لصق الكود في الخانة الأولى.")
         elif not reponse:
-            st.warning("نسيتي الجملة. لصق الجملة اللي قالها ليك الكود في الخانة الثانية.")
+            st.warning("نسيتي الجملة. لصق الجملة في الخانة الثانية.")
         else:
-            # القاعدة 8 - نجمعو الكود + الجملة، باش الفحص يكون على القصة كاملة
-            # هكا الميزان كيعرف شنو هو التطبيق، وشنو قال
+            # ===== الإصلاح: تنقية الحروف العربية =====
+            # المشكل كان: إ ماشي هي ا، و أ ماشي هي ا
+            # دابا نحولوهم كاملين لـ ا باش الفحص ما يغلطش
+            def nqi_texte(t):
+                t = t.replace("'", "").replace('"', "").replace("’", "").strip()
+                t = t.replace("إ", "ا").replace("أ", "ا").replace("آ", "ا")
+                t = t.replace("ة", "ه").replace("ؤ", "و").replace("ئ", "ي")
+                return t
+
             texte_complet = code_a_verifier + "\n" + reponse
-            reponse_nqi = texte_complet.replace("'", "").replace('"', "").replace("’", "").strip()
+            reponse_nqi = nqi_texte(texte_complet)
 
             score = 100
             alertes = []
-            if "متأكد 100" in reponse_nqi and "مصدر" not in reponse_nqi:
+            if "متاكد 100" in reponse_nqi and "مصدر" not in reponse_nqi:
                 score -= 20
                 alertes.append("كيقول أكيد بلا مصدر - هادي علامة ديال التخمين")
-            if "بالتأكيد" in reponse_nqi:
+            if "بالتاكيد" in reponse_nqi:
                 score -= 10
                 alertes.append("كلمة بالتأكيد بلا دليل - طلب منو المصدر")
             if len(reponse_nqi) > 2000 and "خطوة" not in reponse_nqi:
@@ -179,12 +181,12 @@ else:
                 score += 10
                 alertes.append("قال ما عرفتش ولا ممكن - هادي علامة ديال الصدق، مزيان")
 
-            # ===== القاعدة 8 - الفعل قبل الكلام =====
-            kalam_kadab = ["تم حفظ", "تم الحفظ", "تم ارسال", "تم الإرسال", "تم الدفع", "تم بنجاح", "تم حفظ الزبون", "تم ارسال الرسالة", "تم ارسال الواتساب"]
+            # ===== القاعدة 8 - مصححة مع الهمزة =====
+            # دابا كاملين بلا همزة، باش يتلاقاو مع أي كتابة
+            kalam_kadab = ["تم حفظ", "تم الحفظ", "تم ارسال", "تم الارسال", "تم الدفع", "تم بنجاح", "تم حفظ الزبون", "تم ارسال الرسالة", "تم ارسال الواتساب"]
             lqa_kadab = any(k in reponse_nqi for k in kalam_kadab)
 
-            # الدليل: واش الكود فيه فعل حقيقي؟ ولا غير كلام؟
-            dalil_fi3l = ["session_state", "append", "open(", "write", "save", "insert", "ملف", "قاعدة بيانات", "تحقق", "نتأكد", "تجربة", "جرب", "wa.me", "whatsapp", "api", "requests.post", "send"]
+            dalil_fi3l = ["session_state", "append", "open(", "write", "save", "insert", "ملف", "قاعدة بيانات", "تحقق", "نتاكد", "تجربة", "جرب", "wa.me", "whatsapp", "api", "requests.post", "send"]
             kayn_dalil = any(d in reponse_nqi for d in dalil_fi3l)
 
             if lqa_kadab and not kayn_dalil:
