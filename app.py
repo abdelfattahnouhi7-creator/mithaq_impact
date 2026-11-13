@@ -240,22 +240,35 @@ else:
                     # التسجيل التلقائي - هنا هو الإصلاح
                     sajel("معلومة", score, qa3ida)
                     st.success("تسجلت تلقائيا في الذاكرة! سير للتقرير باش تشوفها.")
-
     # =====================================================
-    # الصفحة 2 - التقرير - الخطوة 2
+    # الصفحة 2 - التقرير - v2.2 - ذاكرة دائمة بملف
     # =====================================================
     elif page == "التقرير ديالي - شوف فين كتغلط":
         st.markdown('<h3>التقرير ديالي</h3>', unsafe_allow_html=True)
         hist = st.session_state.historique
+
+        # --- استرجاع الذاكرة من ملف ---
+        st.write("إلا خرجتي ورجعتي، رجع الذاكرة من هنا:")
+        fichier = st.file_uploader("رجع الذاكرة من الملف - اختار ملف ذاكرة_الميزان.csv", type=["csv"])
+        if fichier is not None:
+            import pandas as pd
+            df_upload = pd.read_csv(fichier)
+            # نحولو الداتا ديال الملف لذاكرة
+            st.session_state.historique = df_upload.to_dict("records")
+            # نصلحو النقطة باش تولي رقم
+            for h in st.session_state.historique:
+                h["score"] = int(h["score"])
+            hist = st.session_state.historique
+            st.success("رجعات الذاكرة! شوف التقرير لتحت.")
+
         if len(hist) == 0:
-            st.write("ما زال ما سجلتي والو. سير للميزان، وزن شي حاجة، وورك على سجل هاد النتيجة.")
+            st.write("ما زال ما سجلتي والو. سير للميزان، وزن شي حاجة.")
         else:
             total = len(hist)
-            moyenne = sum([h["score"] for h in hist]) / total
+            moyenne = sum([int(h["score"]) for h in hist]) / total
             st.write(f"شحال من مرة وزنتي؟ {total} مرة")
             st.write(f"النقطة المتوسطة ديالك: {int(moyenne)} من 100")
             st.progress(int(moyenne)/100)
-            # أكثر قاعدة كتطيح فيها
             from collections import Counter
             c = Counter([h["qa3ida"] for h in hist])
             st.write("أكثر قاعدة كتطيح فيها:")
@@ -265,10 +278,24 @@ else:
             st.write("التاريخ ديال التجارب:")
             for h in reversed(hist):
                 st.write(f"{h['tarikh']} - {h['naw3']} - {h['score']} - {h['qa3ida']}")
+
+            # --- حفظ الذاكرة في ملف - هادي هي الذاكرة الدائمة ---
+            st.write("---")
+            st.write("قبل ما تخرج، حفظ الذاكرة:")
+            import pandas as pd
+            df = pd.DataFrame(hist)
+            csv_data = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="حفظ الذاكرة في ملف - ورك هنا قبل ما تخرج",
+                data=csv_data,
+                file_name="ذاكرة_الميزان.csv",
+                mime="text/csv"
+            )
+            st.write("هاد الملف هو الذاكرة ديالك. خليه في التيليفون، ما تمسحوش.")
+
             if st.button("مسح الذاكرة كاملة"):
                 st.session_state.historique = []
                 st.success("تمسحات الذاكرة.")
-
     # =====================================================
     # الصفحة 3 - اقتراح القواعد - الخطوة 3
     # =====================================================
