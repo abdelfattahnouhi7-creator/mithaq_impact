@@ -284,9 +284,6 @@ if len(hist) == 0:
             st.write("التاريخ ديال التجارب:")
             for h in reversed(hist):
                 st.write(f"{h['tarikh']} - {h['naw3']} - {h['score']} - {h['qa3ida']}")
-
-            
-            )
             st.write("هاد الملف هو الذاكرة ديالك. خليه في التيليفون، ما تمسحوش.")
 
             if st.button("مسح الذاكرة كاملة"):
