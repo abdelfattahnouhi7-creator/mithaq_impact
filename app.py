@@ -83,7 +83,6 @@ if page == "القواعد":
     ]
 
     for i, (titre, regle, pourquoi, danger) in enumerate(regles):
-        # القاعدة 8 بلون مختلف باش تبان جديدة
         css_class = "card-new" if i == 7 else "card"
         st.markdown(f"""
         <div class="{css_class}">
@@ -148,40 +147,37 @@ else:
     if 'historique' not in st.session_state:
         st.session_state.historique = []
 
-   # --- الذاكرة الدائمة - Google Sheets - v2.3 ---
-GOOGLE_URL = "https://script.google.com/macros/s/AKfycbwpjE6WNAdi9M_6V-ofbIDVKLs8Xpeb-SxL0SWDk8r5b9kFZAUAHe77GzvftGd4C_v0/exec"
+    # --- الذاكرة الدائمة - Google Sheets - v2.3 ---
+    GOOGLE_URL = "https://script.google.com/macros/s/AKfycbwpjE6WNAdi9M_6V-ofbIDVKLs8Xpeb-SxL0SWDk8r5b9kFZAUAHe77GzvftGd4C_v0/exec"
 
-def sajel(naw3, score, qa3ida):
-    import requests
-    from datetime import datetime
-    tarikh = datetime.now().strftime("%d/%m %H:%M")
-    st.session_state.historique.append({"tarikh": tarikh, "naw3": naw3, "score": score, "qa3ida": qa3ida})
-    try:
-        requests.post(GOOGLE_URL, json={"tarikh": tarikh, "naw3": naw3, "score": score, "qa3ida": qa3ida}, timeout=5)
-    except:
-        pass
+    def sajel(naw3, score, qa3ida):
+        import requests
+        from datetime import datetime
+        tarikh = datetime.now().strftime("%d/%m %H:%M")
+        st.session_state.historique.append({"tarikh": tarikh, "naw3": naw3, "score": score, "qa3ida": qa3ida})
+        try:
+            requests.post(GOOGLE_URL, json={"tarikh": tarikh, "naw3": naw3, "score": score, "qa3ida": qa3ida}, timeout=5)
+        except:
+            pass
 
-def jib_dakira_men_google():
-    import requests
-    try:
-        r = requests.get(GOOGLE_URL, timeout=5)
-        data = r.json()
-        for h in data:
-            h["score"] = int(h["score"])
-        return data
-    except:
-        return [] 
+    def jib_dakira_men_google():
+        import requests
+        try:
+            r = requests.get(GOOGLE_URL, timeout=5)
+            data = r.json()
+            for h in data:
+                h["score"] = int(h["score"])
+            return data
+        except:
+            return []
 
     # ===== التنقل بين الصفحات =====
-    page = st.radio("فين بغيتي تمشي؟", ["الميزان - وزن دابا", "التقرير ديالي - شوف فين كتغلط", "اقتراح القواعد - شنو خاصنا نزيدو"])
+    page2 = st.radio("فين بغيتي تمشي؟", ["الميزان - وزن دابا", "التقرير ديالي - شوف فين كتغلط", "اقتراح القواعد - شنو خاصنا نزيدو"])
 
     # =====================================================
     # الصفحة 1 - الميزان
     # =====================================================
-        # =====================================================
-    # الصفحة 1 - الميزان - الإصلاح v2.1 - تسجيل تلقائي
-    # =====================================================
-    if page == "الميزان - وزن دابا":
+    if page2 == "الميزان - وزن دابا":
         choix = st.radio("شنو بغيتي توزن اليوم؟", ["كود - بغيت نتحقق من كود", "معلومة - بغيت نتحقق من معلومة"])
 
         # --- قسم الكود ---
@@ -214,7 +210,6 @@ def jib_dakira_men_google():
                     st.write(f"نقطة الثقة: {score} من 100")
                     for a in alertes:
                         st.write(a)
-                    # التسجيل التلقائي - هنا هو الإصلاح
                     sajel("كود", score, qa3ida)
                     st.success("تسجلت تلقائيا في الذاكرة! سير للتقرير باش تشوفها.")
 
@@ -252,22 +247,22 @@ def jib_dakira_men_google():
                     st.write(f"نقطة الثقة: {score} من 100")
                     for a in alertes:
                         st.write(a)
-                    # التسجيل التلقائي - هنا هو الإصلاح
                     sajel("معلومة", score, qa3ida)
                     st.success("تسجلت تلقائيا في الذاكرة! سير للتقرير باش تشوفها.")
+
     # =====================================================
-    # الصفحة 2 - التقرير - v2.2 - ذاكرة دائمة بملف
+    # الصفحة 2 - التقرير - ذاكرة دائمة من Google
     # =====================================================
-    elif page == "التقرير ديالي - شوف فين كتغلط":
+    elif page2 == "التقرير ديالي - شوف فين كتغلط":
         st.markdown('<h3>التقرير ديالي</h3>', unsafe_allow_html=True)
         hist = jib_dakira_men_google()
-if len(hist) > 0:
-    st.session_state.historique = hist
-    st.success("الذاكرة رجعات من Google! شوف التقرير لتحت")
-else:
-    hist = st.session_state.historique
+        if len(hist) > 0:
+            st.session_state.historique = hist
+            st.success("الذاكرة رجعات من Google! شوف التقرير لتحت")
+        else:
+            hist = st.session_state.historique
 
-if len(hist) == 0:
+        if len(hist) == 0:
             st.write("ما زال ما سجلتي والو. سير للميزان، وزن شي حاجة.")
         else:
             total = len(hist)
@@ -284,17 +279,19 @@ if len(hist) == 0:
             st.write("التاريخ ديال التجارب:")
             for h in reversed(hist):
                 st.write(f"{h['tarikh']} - {h['naw3']} - {h['score']} - {h['qa3ida']}")
-            st.write("هاد الملف هو الذاكرة ديالك. خليه في التيليفون، ما تمسحوش.")
 
             if st.button("مسح الذاكرة كاملة"):
                 st.session_state.historique = []
                 st.success("تمسحات الذاكرة.")
+
     # =====================================================
-    # الصفحة 3 - اقتراح القواعد - الخطوة 3
+    # الصفحة 3 - اقتراح القواعد
     # =====================================================
     else:
         st.markdown('<h3>اقتراح القواعد</h3>', unsafe_allow_html=True)
-        hist = st.session_state.historique
+        hist = jib_dakira_men_google()
+        if len(hist) == 0:
+            hist = st.session_state.historique
         if len(hist) == 0:
             st.write("ما زال ما كاين والو باش نقترح عليك. سجل 3 ديال التجارب على الأقل.")
         else:
