@@ -17,7 +17,7 @@ import streamlit as st
 
 st.set_page_config(page_title="الميثاق التنفيذي - IMPACT (الجيل الثالث)", page_icon="📜", layout="centered")
 
-# ---------- v8: الحماية بكلمة سر ----------
+# ---------- v8.1: الحماية بكلمة سر ----------
 def get_app_password():
     try:
         return st.secrets.get("IMPACT_PASSWORD", "")
@@ -122,7 +122,7 @@ def dedupe_history(history):
         seen.add(fp); out.append(h)
     return out, removed
 
-# ---------- v8: الحفظ الدائم ----------
+# ---------- v8.1: الحفظ الدائم ----------
 HISTORY_FILE = "impact_history.json"
 
 def load_history_from_disk():
@@ -143,14 +143,22 @@ def save_history_to_disk(history):
     except Exception:
         return False
 
-# ---------- v8: التنفيذ الفعلي Sandbox ----------
-BLOCKED_PATTERNS = ["os.", "sys.", "subprocess", "open(", "__import__", "eval(", "exec(", "socket", "shutil", "pathlib", "input("]
+# ---------- v8.1: التنفيذ الفعلي Sandbox - مصلح ----------
+# تصليح v8.1: زدنا "import " و "import os" و "import sys" باش أي import يتشد من الفلتر الأول
+# قبل: كان كيقلب غير على "os." بنقطة، و "import os" كان كيدوز
+BLOCKED_PATTERNS = [
+    "import ", "import os", "import sys", "from os", "from sys",
+    "os.", "sys.", "subprocess", "open(", "__import__", "eval(", "exec(",
+    "socket", "shutil", "pathlib", "input(", "compile(", "globals(", "locals(",
+    "__builtins__", "getattr", "setattr"
+]
 
 def run_python_sandbox(code, timeout_sec=3):
-    """كيشغل الكود في Sandbox محدود. ممنوع الملفات والشبكة والأوامر."""
+    """كيشغل الكود في Sandbox محدود. ممنوع الملفات والشبكة والأوامر و أي import."""
+    code_lower = code.lower()
     for pat in BLOCKED_PATTERNS:
-        if pat in code:
-            return False, "", f"⛔ ممنوع في Sandbox: لقيت '{pat}'. هاد التنفيذ محمي - ما كيسمحش بالملفات أو الشبكة أو أوامر النظام. حيد هاد السطر وجرب تاني."
+        if pat in code_lower:
+            return False, "", f"⛔ ممنوع في Sandbox: لقيت '{pat}'. هاد التنفيذ محمي - ما كيسمحش بالملفات أو الشبكة أو أوامر النظام أو أي import. حيد هاد السطر وجرب تاني."
     out_buf = io.StringIO(); err_buf = io.StringIO()
     result = {"done": False, "exc": None}
     def _target():
@@ -167,6 +175,9 @@ def run_python_sandbox(code, timeout_sec=3):
     if t.is_alive():
         return False, out_buf.getvalue(), "⏱️ الكود خذا أكثر من 3 ثواني - وقفناه باش ما يبلوكيش التطبيق. يمكن فيه boucle لا نهائية."
     if result["exc"]:
+        # v8.1: ترجمة أخطاء الاستيراد للدارجة
+        if "__import__" in result["exc"] or "ImportError" in result["exc"] or "import" in result["exc"].lower():
+            return False, out_buf.getvalue(), "⛔ ممنوع في Sandbox: حاولتي تستعمل import. Sandbox ما كيسمحش بأي import - لا os ولا requests ولا غيرهم. جرب كود بلا import."
         return False, out_buf.getvalue(), result["exc"]
     return True, out_buf.getvalue(), err_buf.getvalue()
 
@@ -255,7 +266,7 @@ def inspect_requirement(code, requirement):
         results.append(f"{label}: " + (f"لقيت مؤشرات نصية: {', '.join(found)}." if found else "ما لقيتش مؤشرات نصية معروفة.") + " " + caveat)
     return results, "خاص اختبار"
 
-# v8: بلا Hardcoded Form - Secrets فقط
+# v8.1: بلا Hardcoded Form - Secrets فقط
 def get_form_config():
     try:
         s = st.secrets
@@ -289,7 +300,7 @@ def persist():
     save_history_to_disk(st.session_state.history)
 
 st.title("📜 الميثاق التنفيذي - IMPACT (الجيل الثالث)")
-st.caption("من الكلام إلى الفعل: اتفاق عمل بـ 22 قاعدة ملزمة.")
+st.caption("من الكلام إلى الفعل: اتفاق عمل بـ 22 قاعدة ملزمة. - v8.1")
 st.info("هاد التطبيق كيولد نص اتفاق عمل بـ 22 قاعدة، وكيتحقق من الكود قبل الاعتماد عليه. هادا اتفاق عمل بينك وبين الذكاء الاصطناعي، ماشي أمر نظام.")
 
 main_page = st.radio("شنو بغيتي تشوف؟", ["القواعد (22 قاعدة)", "نص اتفاق العمل (الجيل الثالث)", "ميزان التحقق المتقدم"], horizontal=True)
@@ -332,7 +343,7 @@ elif main_page == "نص اتفاق العمل (الجيل الثالث)":
 
 إلا فهمتي هاد الاتفاق وتقدر تلتزم به في هاد المحادثة، قول: قبلت اتفاق العمل، ونبداو.
 """
-    st.text_area("اتفاق العمل كامل (v8)", executive_charter, height=520)
+    st.text_area("اتفاق العمل كامل (v8.1)", executive_charter, height=520)
     with st.expander("عرض أو نسخ كود التطبيق كاملاً"):
         try:
             with open(__file__, "r", encoding="utf-8") as f:
@@ -342,7 +353,7 @@ elif main_page == "نص اتفاق العمل (الجيل الثالث)":
 
 else:
     st.subheader("ميزان التحقق المتقدم (AST + Pyflakes + Runtime Sandbox)")
-    st.caption("فحص هيكلي + تنفيذ فعلي في Sandbox محمي. ممنوع الملفات والشبكة وأوامر النظام.")
+    st.caption("فحص هيكلي + تنفيذ فعلي في Sandbox محمي. ممنوع الملفات والشبكة وأوامر النظام و أي import.")
     section = st.radio("اختار نوع الفحص", ["فحص نحوي والهيكلي للكود", "تنفيذ فعلي في Sandbox (جديد v8)", "مؤشرات تحقيق الشرط", "مراجعة رقم ومصدر"])
 
     if section == "فحص نحوي والهيكلي للكود":
@@ -361,7 +372,7 @@ else:
                 st.info("التحليل الهيكلي كيعطيك مؤشرات بنيوية، ولكن ما كيعوضش التشغيل الفعلي.")
 
     elif section == "تنفيذ فعلي في Sandbox (جديد v8)":
-        st.warning("⚠️ Sandbox للاختبار فقط: ممنوع open() / os / requests / input / eval. المسموح: print / حسابات / list / dict / دوال بسيطة. المدة القصوى 3 ثواني.")
+        st.warning("⚠️ Sandbox للاختبار فقط: ممنوع open() / os / requests / input / eval / أي import. المسموح: print / حسابات / list / dict / دوال بسيطة. المدة القصوى 3 ثواني.")
         code_run = st.text_area("لصق كود Python بسيط للتنفيذ", value='print("hello IMPACT")\nprint(2 + 3)', height=180)
         if st.button("شغّل الكود فعلياً ▶️", key="run_sandbox"):
             if not code_run.strip():
@@ -479,4 +490,4 @@ else:
         st.caption("ما كاين حتى سجل محلي دابا.")
 
 st.divider()
-st.caption("IMPACT التنفيذي الجيل الثالث v8 — تنفيذ فعلي Sandbox + حفظ دائم + حماية بكلمة سر.")
+st.caption("IMPACT التنفيذي الجيل الثالث v8.1 — تنفيذ فعلي Sandbox + حفظ دائم + حماية بكلمة سر + تصليح رسالة import.")
