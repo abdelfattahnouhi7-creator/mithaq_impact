@@ -1,16 +1,11 @@
 import ast
-import json
+import hashlib
 import re
 import uuid
 from datetime import datetime
 
 import requests
 import streamlit as st
-
-# ------------------------------------------------------------
-# IMPACT v4.1 - بلا نقاط مخترعة
-# الحالة: نجح / فشل / خاص اختبار - ماشي 70 ولا 50
-# ------------------------------------------------------------
 
 st.set_page_config(page_title="الميثاق - IMPACT", page_icon="📜", layout="centered")
 
@@ -31,8 +26,6 @@ h1,h2,h3,p,div,span,label { direction: rtl; text-align: right; line-height: 1.85
 </style>
 """, unsafe_allow_html=True)
 
-GOOGLE_URL = st.secrets.get("GOOGLE_URL", "") if hasattr(st, "secrets") else ""
-
 RULES = [
     ("1 - الصدق قبل السرعة", "إلا ما عرفتيش، قول ما عرفتش. ما تخترعش جواب باش تبان عارف.", "كيمنع المعلومات المختلقة.", "معلومة خاطئة تقدر تضيع الوقت والفلوس."),
     ("2 - المصدر قبل الرأي", "وضح مصدر المعلومات المهمة، وفرّق بين الحقيقة والرأي والتخمين. إلا ما عندكش مصدر، قول هاد الشي بوضوح.", "كيخليني نعرف درجة موثوقية الجواب.", "التخمين يقدر يتفهم على أنه حقيقة."),
@@ -50,13 +43,7 @@ RULES = [
 
 def show_card(title, body, why="", danger="", new=False):
     css = "card-new" if new else "card"
-    st.markdown(
-        f'<div class="{css}"><div class="card-title">{title}</div>'
-        f'<div class="card-text"><b>القاعدة:</b> {body}</div>'
-        f'<div class="card-text"><b>علاش:</b> {why}</div>'
-        f'<div class="card-warn"><b>الخطر إلا تهملات:</b> {danger}</div></div>',
-        unsafe_allow_html=True
-    )
+    st.markdown(f'<div class="{css}"><div class="card-title">{title}</div><div class="card-text"><b>القاعدة:</b> {body}</div><div class="card-text"><b>علاش:</b> {why}</div><div class="card-warn"><b>الخطر إلا تهملات:</b> {danger}</div></div>', unsafe_allow_html=True)
 
 def show_status(status):
     if status == "نجح":
@@ -72,18 +59,37 @@ def normalize_arabic(text):
         text = text.replace(a, b)
     return text
 
+def fingerprint(rec):
+    key = f"{rec.get('kind','')}|{rec.get('status','')}|{rec.get('rule','')}|{rec.get('details','')}"
+    return hashlib.md5(key.encode("utf-8")).hexdigest()
+
+def is_duplicate(rec, history):
+    fp = fingerprint(rec)
+    for h in history:
+        if isinstance(h, dict) and fingerprint(h) == fp:
+            return True
+    return False
+
+def dedupe_history(history):
+    seen = set()
+    out = []
+    removed = 0
+    for h in history:
+        if not isinstance(h, dict):
+            continue
+        fp = fingerprint(h)
+        if fp in seen:
+            removed += 1
+            continue
+        seen.add(fp)
+        out.append(h)
+    return out, removed
+
 def inspect_python(code):
-    """فحص ساكن أولي: syntax فقط وبعض التحذيرات الواضحة. لا يشغّل الكود."""
     try:
         tree = ast.parse(code)
     except SyntaxError as exc:
-        return {
-            "syntax_ok": False,
-            "status": "فشل",
-            "summary": f"خطأ نحوي فالسطر {exc.lineno}: {exc.msg}",
-            "warnings": ["الكود ما دازش من التحليل النحوي."],
-        }
-
+        return {"syntax_ok": False, "status": "فشل", "summary": f"خطأ نحوي فالسطر {exc.lineno}: {exc.msg}", "warnings": ["الكود ما دازش من التحليل النحوي."]}
     warnings = []
     imports = set()
     for node in ast.walk(tree):
@@ -91,7 +97,6 @@ def inspect_python(code):
             imports.update(alias.asname or alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             imports.update(alias.asname or alias.name for alias in node.names)
-
     if re.search(r"\bst\.", code) and "st" not in imports:
         warnings.append("بان استعمال st. ولكن ما لقيتش import streamlit as st بشكل واضح.")
     if re.search(r"\bpd\.", code) and "pd" not in imports:
@@ -99,7 +104,7 @@ def inspect_python(code):
     if re.search(r"\brequests\.", code) and "requests" not in imports:
         warnings.append("بان استعمال requests. ولكن ما لقيتش import requests بشكل واضح.")
     if re.search(r"\beval\s*\(", code):
-        warnings.append("تحذير أمني: لقيت eval()؛ راجع واش ضرورية، وما تستعملهاش مع مدخلات غير موثوقة.")
+        warnings.append("تحذير أمني: لقيت eval()؛ راجع واش ضرورية.")
     if re.search(r"\bexec\s*\(", code):
         warnings.append("تحذير أمني: لقيت exec()؛ راجع مصدر الكود اللي كيتنفذ.")
     if not warnings:
@@ -107,7 +112,6 @@ def inspect_python(code):
     return {"syntax_ok": True, "status": "نجح", "summary": "التحليل النحوي نجح.", "warnings": warnings}
 
 def inspect_requirement(code, requirement):
-    """مطابقة نصية استرشادية فقط؛ لا تثبت أن الفعل وقع."""
     c = normalize_arabic(code)
     r = normalize_arabic(requirement)
     checks = []
@@ -126,61 +130,46 @@ def inspect_requirement(code, requirement):
     if not checks:
         return ["ما قدرتش نحدد نوع الشرط آلياً. خاص مراجعة يدوية واختبار عملي."], "خاص اختبار"
     results = []
-    has_any = False
     for label, found, caveat in checks:
-        if found:
-            has_any = True
         results.append(f"{label}: " + (f"لقيت مؤشرات نصية: {', '.join(found)}." if found else "ما لقيتش مؤشرات نصية معروفة.") + " " + caveat)
-    # إلا لقيت مؤشرات ولا ما لقيتش، في الحالتين خاص اختبار - ماشي نجح ولا فشل نهائي
     return results, "خاص اختبار"
 
-def get_google_url():
+# --- Google Form بدل Apps Script ---
+def get_form_config():
     try:
-        return st.secrets.get("GOOGLE_URL", "")
+        return {
+            "url": st.secrets.get("GOOGLE_FORM_URL", ""),
+            "date": st.secrets.get("ENTRY_DATE", ""),
+            "kind": st.secrets.get("ENTRY_KIND", ""),
+            "status": st.secrets.get("ENTRY_STATUS", ""),
+            "rule": st.secrets.get("ENTRY_RULE", ""),
+            "details": st.secrets.get("ENTRY_DETAILS", ""),
+        }
     except Exception:
-        return ""
+        return {"url": "", "date": "", "kind": "", "status": "", "rule": "", "details": ""}
 
-def save_to_google(record):
-    url = get_google_url()
-    if not url:
-        return False, "رابط Google Apps Script ما متهيّأش في Secrets."
+def save_to_google_form(record):
+    cfg = get_form_config()
+    if not cfg["url"] or not cfg["date"]:
+        return False, "إعدادات Google Form ما متهيّأش في Secrets."
+    payload = {
+        cfg["date"]: record.get("date", ""),
+        cfg["kind"]: record.get("kind", ""),
+        cfg["status"]: record.get("status", ""),
+        cfg["rule"]: record.get("rule", ""),
+        cfg["details"]: record.get("details", ""),
+    }
     try:
-        response = requests.post(url, json=record, timeout=15)
-        response.raise_for_status()
-        try:
-            payload = response.json()
-        except ValueError:
-            return False, "الخادم جاوب، ولكن ما رجعش JSON نقدر نتحقق منو. ما نقدرش نأكد الحفظ."
-        if isinstance(payload, dict) and payload.get("success") is True:
-            return True, "الخادم أكد نجاح العملية."
-        return False, "الخادم ما رجعش success=true. الحفظ غير مؤكد."
+        # Google Form كيرجع 200 حتى إلا كان ناجح، ما كيرجعش JSON
+        resp = requests.post(cfg["url"], data=payload, timeout=15)
+        if resp.status_code in (200, 302):
+            return True, "تم إرسال النتيجة لـ Google Form. تحقق منها في Responses."
+        return False, f"Google Form جاوب بـ {resp.status_code}."
     except requests.RequestException as exc:
-        return False, f"فشل الاتصال بالخادم: {exc}"
-
-def load_from_google():
-    url = get_google_url()
-    if not url:
-        return None, "رابط Google Apps Script ما متهيّأش."
-    try:
-        response = requests.get(url, timeout=15)
-        response.raise_for_status()
-        data = response.json()
-        if not isinstance(data, list):
-            return None, "صيغة البيانات الراجعة ماشي لائحة كما متوقع."
-        return data, None
-    except (requests.RequestException, ValueError) as exc:
-        return None, f"تعذر جلب السجل: {exc}"
+        return False, f"فشل الاتصال: {exc}"
 
 def add_pending(kind, status, rule, details):
-    st.session_state.pending = {
-        "id": str(uuid.uuid4()),
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "kind": kind,
-        "status": status,
-        "score": "",
-        "rule": rule,
-        "details": details,
-    }
+    st.session_state.pending = {"id": str(uuid.uuid4()), "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "kind": kind, "status": status, "rule": rule, "details": details}
 
 if "history" not in st.session_state:
     st.session_state.history = []
@@ -200,52 +189,16 @@ if main_page == "القواعد":
 
 elif main_page == "نص الميثاق":
     st.subheader("نص جاهز للنسخ")
-    objective = st.text_input(
-        "شنو هو الهدف ديالك؟",
-        value="بغيت نبني تطبيقات وكودات كتجيب ليا قيمة حقيقية، بشكل قانوني وصحيح"
-    )
-    level = st.selectbox(
-        "المستوى ديالك",
-        ["مبتدئ - بغيت الشرح بالدارجة", "متوسط - كنفهم شوية", "محترف - هضر معايا بالتقنية"]
-    )
-    rules_text = "\n".join(
-        f"{i+1} - {title.split(' - ', 1)[1]}: {body}"
-        for i, (title, body, _, _) in enumerate(RULES)
-    )
-    charter = f"""الميثاق - IMPACT
-
-سلام، هادا هو الميثاق اللي بغيت نعتمدو كإطار للعمل بيناتنا.
-الالتزام به كيبقى خاضع لقدرات الأداة وقواعد السلامة والصلاحيات المتاحة.
-
-الهدف: {objective}
-المستوى: {level}
-
-القواعد:
-{rules_text}
-
-كيفاش تجاوبني:
-- جاوبني بالدارجة المغربية البسيطة.
-- بدا بالخلاصة، ومن بعد التفاصيل.
-- إلا كان الجواب فيه كود، عطيني نسخة كاملة قابلة للنسخ، ووضح المتطلبات وطريقة التشغيل.
-- فرّق بين اللي تأكدتي منو واللي باقي افتراض أو تخمين.
-- قبل أي تغيير ممكن يسبب فقدان بيانات أو مصاريف أو إرسال خارجي، وضح الأثر وخذ موافقتي.
-- ما تدّعيش تنفيذ عملية أو اختبار ما وقعش فعلياً.
-
-معيار النجاح:
-حل قانوني وآمن قدر الإمكان، خدام بالاختبار، وعندو قيمة حقيقية.
-
-إلا فهمتي هاد الميثاق وتقدر تلتزم به ضمن حدودك، قول: قبلت الميثاق، ونبداو.
-"""
+    objective = st.text_input("شنو هو الهدف ديالك؟", value="بغيت نبني تطبيقات وكودات كتجيب ليا قيمة حقيقية، بشكل قانوني وصحيح")
+    level = st.selectbox("المستوى ديالك", ["مبتدئ - بغيت الشرح بالدارجة", "متوسط - كنفهم شوية", "محترف - هضر معايا بالتقنية"])
+    rules_text = "\n".join(f"{i+1} - {title.split(' - ', 1)[1]}: {body}" for i, (title, body, _, _) in enumerate(RULES))
+    charter = f"""الميثاق - IMPACT\n\nسلام، هادا هو الميثاق اللي بغيت نعتمدو كإطار للعمل بيناتنا.\nالالتزام به كيبقى خاضع لقدرات الأداة وقواعد السلامة والصلاحيات المتاحة.\n\nالهدف: {objective}\nالمستوى: {level}\n\nالقواعد:\n{rules_text}\n\nكيفاش تجاوبني:\n- جاوبني بالدارجة المغربية البسيطة.\n- بدا بالخلاصة، ومن بعد التفاصيل.\n- إلا كان الجواب فيه كود، عطيني نسخة كاملة قابلة للنسخ، ووضح المتطلبات وطريقة التشغيل.\n- فرّق بين اللي تأكدتي منو واللي باقي افتراض أو تخمين.\n- قبل أي تغيير ممكن يسبب فقدان بيانات أو مصاريف أو إرسال خارجي، وضح الأثر وخذ موافقتي.\n- ما تدّعيش تنفيذ عملية أو اختبار ما وقعش فعلياً.\n\nمعيار النجاح:\nحل قانوني وآمن قدر الإمكان، خدام بالاختبار، وعندو قيمة حقيقية.\n\nإلا فهمتي هاد الميثاق وتقدر تلتزم به ضمن حدودك، قول: قبلت الميثاق، ونبداو.\n"""
     st.text_area("الميثاق كامل", charter, height=620)
 
 else:
     st.subheader("ميزان التحقق")
     st.caption("النتائج هنا استرشادية. ما كاين حتى فحص آلي بسيط يقدر يضمن صحة الكود أو صدق المعلومة بشكل كامل.")
-
-    section = st.radio(
-        "اختار نوع الفحص",
-        ["فحص نحوي للكود", "مؤشرات تحقيق الشرط", "مراجعة رقم ومصدر"]
-    )
+    section = st.radio("اختار نوع الفحص", ["فحص نحوي للكود", "مؤشرات تحقيق الشرط", "مراجعة رقم ومصدر"])
 
     if section == "فحص نحوي للكود":
         code_input = st.text_area("لصق كود Python هنا", height=260)
@@ -311,59 +264,57 @@ else:
         st.write(f"النتيجة المعلقة: {pending['kind']} — الحالة: {pending['status']}")
         show_status(pending["status"])
         st.write(pending["details"])
+        if is_duplicate(pending, st.session_state.history):
+            st.warning("⚠️ هاد النتيجة مسجلة من قبل في هاد الجلسة.")
         col1, col2 = st.columns(2)
         with col1:
             if st.button("سجل محلياً"):
-                st.session_state.history.append(pending)
-                st.session_state.pending = None
-                st.success("تسجلات فالجلسة الحالية فقط.")
-        with col2:
-            if st.button("حاول التسجيل في Google"):
-                ok, message = save_to_google(pending)
-                if ok:
+                if is_duplicate(pending, st.session_state.history):
+                    st.error("ما تسجلاتش - هادي مكررة.")
+                else:
                     st.session_state.history.append(pending)
                     st.session_state.pending = None
-                    st.success("الخادم أكد نجاح الطلب: " + message)
+                    st.success("تسجلات فالجلسة الحالية فقط.")
+        with col2:
+            if st.button("حاول التسجيل في Google Form"):
+                ok, message = save_to_google_form(pending)
+                if ok:
+                    if not is_duplicate(pending, st.session_state.history):
+                        st.session_state.history.append(pending)
+                    st.session_state.pending = None
+                    st.success(message)
                 else:
                     st.error(message)
-                    st.warning("ما تسجلاتش فاللائحة المحلية على أساس أنها محفوظة في Google.")
         if st.button("تجاهل النتيجة"):
             st.session_state.pending = None
             st.info("تم تجاهل النتيجة؛ ما تسجلاتش.")
 
     st.divider()
     st.subheader("التقرير")
-    if st.button("جلب السجل من Google"):
-        records, error = load_from_google()
-        if error:
-            st.error(error)
-        else:
-            st.session_state.history = records
-            st.success(f"تم جلب {len(records)} سجل من الخادم.")
-
+    st.caption("Google Form ما كيرجعش السجلات للتطبيق. باش تشوف السجلات الكاملة، سير لـ Google Form > Responses > View in Sheets.")
     history = st.session_state.history
     if history:
-        st.write(f"عدد السجلات فهاد الجلسة/آخر تحميل: {len(history)}")
-        # بلا متوسط - المتوسط ديال حالات ماشي أرقام
+        st.write(f"عدد السجلات فهاد الجلسة: {len(history)}")
         from collections import Counter
-        c = Counter([r.get("status", r.get("score", "?")) if isinstance(r, dict) else "?" for r in history])
+        c = Counter([r.get("status", "?") if isinstance(r, dict) else "?" for r in history])
         st.write("توزيع الحالات:")
         for k, v in c.items():
             st.write(f"- {k} : {v} مرة")
+        if st.button("🧹 حيد التكرار من التقرير"):
+            cleaned, removed = dedupe_history(history)
+            st.session_state.history = cleaned
+            if removed == 0:
+                st.info("ما كاين حتى تكرار. التقرير نقي.")
+            else:
+                st.success(f"حيدت {removed} سجل مكرر. دابا التقرير فيه {len(cleaned)} سجل نقي.")
         for row in reversed(history):
             if isinstance(row, dict):
-                status_txt = row.get("status", row.get("score", ""))
-                st.write(
-                    f"{row.get('date', row.get('tarikh', 'بلا تاريخ'))} | "
-                    f"{row.get('kind', row.get('naw3', ''))} | "
-                    f"الحالة: {status_txt} | "
-                    f"{row.get('rule', row.get('qa3ida', ''))}"
-                )
+                st.write(f"{row.get('date','')} | {row.get('kind','')} | الحالة: {row.get('status','')} | {row.get('rule','')}")
         if st.button("مسح سجل هاد الجلسة"):
             st.session_state.history = []
-            st.success("تم مسح السجل المحلي من هاد الجلسة فقط. بيانات Google ما تمسحاتش.")
+            st.success("تم مسح السجل المحلي من هاد الجلسة فقط. بيانات Google Form ما تمسحاتش.")
     else:
-        st.caption("ما كاين حتى سجل محلي محمّل دابا.")
+        st.caption("ما كاين حتى سجل محلي دابا.")
 
 st.divider()
 st.caption("IMPACT — ما نعتابروش النتيجة مؤكدة حتى يكون عندنا دليل مناسب.")
