@@ -64,7 +64,6 @@ def normalize_arabic(text):
         text = text.replace(a, b)
     return text
 
-# --- v6.1 FIX 1: fingerprint فيه التاريخ ديال اليوم فقط ---
 def fingerprint(rec):
     date_only = str(rec.get('date',''))[:10]
     key = f"{date_only}|{rec.get('kind','')}|{rec.get('status','')}|{rec.get('rule','')}|{rec.get('details','')}"
@@ -99,7 +98,6 @@ def _is_secret_name(name):
 def _is_secret_value(node):
     return isinstance(node, ast.Constant) and isinstance(node.value, str) and len(node.value) > 5
 
-# --- v6.1 FIX 2: فحص المفاتيح كيشوف Assign + AnnAssign + Dict ---
 def inspect_python_advanced(code):
     try:
         tree = ast.parse(code)
@@ -170,10 +168,11 @@ def inspect_requirement(code, requirement):
         results.append(f"{label}: " + (f"لقيت مؤشرات نصية: {', '.join(found)}." if found else "ما لقيتش مؤشرات نصية معروفة.") + " " + caveat)
     return results, "خاص اختبار"
 
+# --- v6.2 NEW: زيدنا رابط Responses ---
 def get_form_config():
     try:
         if not hasattr(st, "secrets"):
-            return {"url": "", "date": "", "kind": "", "status": "", "rule": "", "details": ""}
+            return {"url": "", "date": "", "kind": "", "status": "", "rule": "", "details": "", "responses_url": ""}
         return {
             "url": st.secrets.get("GOOGLE_FORM_URL", ""),
             "date": st.secrets.get("ENTRY_DATE", ""),
@@ -181,9 +180,10 @@ def get_form_config():
             "status": st.secrets.get("ENTRY_STATUS", ""),
             "rule": st.secrets.get("ENTRY_RULE", ""),
             "details": st.secrets.get("ENTRY_DETAILS", ""),
+            "responses_url": st.secrets.get("GOOGLE_FORM_RESPONSES_URL", ""),
         }
     except Exception:
-        return {"url": "", "date": "", "kind": "", "status": "", "rule": "", "details": ""}
+        return {"url": "", "date": "", "kind": "", "status": "", "rule": "", "details": "", "responses_url": ""}
 
 def save_to_google_form(record):
     cfg = get_form_config()
@@ -361,6 +361,14 @@ else:
 
     st.divider()
     st.subheader("التقرير")
+    # --- v6.2 NEW: عداد + زر Responses ---
+    st.write(f"عدد السجلات فهاد الجلسة (محلي): {len(st.session_state.history)}")
+    st.caption("Google Form ما كيرجعش السجلات للتطبيق. العدد الكامل كاين غير في Google Form > Responses.")
+    cfg_now = get_form_config()
+    if cfg_now.get("responses_url"):
+        st.link_button("📊 شوف سجلات Google Form كاملة", cfg_now["responses_url"])
+    else:
+        st.info("زيد GOOGLE_FORM_RESPONSES_URL في Secrets باش يبان ليك زر سجلات Google Form هنا.")
     st.caption("Google Form ما كيرجعش السجلات للتطبيق. باش تشوف السجلات الكاملة، سير لـ Google Form > Responses > View in Sheets.")
     history = st.session_state.history
     if history:
@@ -387,4 +395,4 @@ else:
         st.caption("ما كاين حتى سجل محلي دابا.")
 
 st.divider()
-st.caption("IMPACT التنفيذي v6.1 — ما نعتابروش النتيجة مؤكدة حتى يكون عندنا دليل مناسب.")
+st.caption("IMPACT التنفيذي v6.2 — ما نعتابروش النتيجة مؤكدة حتى يكون عندنا دليل مناسب.")
