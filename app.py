@@ -1,5 +1,7 @@
 import ast
 import hashlib
+import importlib.util
+import io
 import re
 import uuid
 from datetime import datetime
@@ -137,7 +139,6 @@ def inspect_python_advanced(code):
                     for k, v in zip(node.value.keys, node.value.values):
                         if isinstance(k, ast.Constant) and isinstance(k.value, str) and _is_secret_name(k.value) and _is_secret_value(v):
                             hardcoded_secret_found = True
-        # v7.1 FIX: رجعنا هاد الجوج اللي كانو محيدين في v7.0
         elif isinstance(node, ast.AnnAssign):
             if isinstance(node.target, ast.Name) and _is_secret_name(node.target.id) and node.value is not None and _is_secret_value(node.value):
                 hardcoded_secret_found = True
@@ -153,9 +154,24 @@ def inspect_python_advanced(code):
         warnings.append(f"تنبيه: لقيت {empty_functions} دالة فارغة فيها غير (pass) وما مكتوباش فيها اللوجيك ديالها.")
     if not has_try_except and ("requests." in code or "open(" in code):
         warnings.append("ملاحظة جودة: الكود فيه عمليات إدخال/إخراج أو طلبات شبكة بدون حماية (Try/Except).")
+    if importlib.util.find_spec("pyflakes") is not None:
+        try:
+            from pyflakes.api import check
+            from pyflakes.reporter import Reporter
+            output = io.StringIO()
+            reporter = Reporter(output, output)
+            issue_count = check(code, "<الكود المدخل>", reporter=reporter)
+            if issue_count:
+                warnings.append(f"Pyflakes رصد {issue_count} ملاحظة محتملة:\n{output.getvalue().strip()}")
+            else:
+                warnings.append("Pyflakes: ما رصد حتى ملاحظة من الأنواع اللي كيكشفها.")
+        except Exception as exc:
+            warnings.append(f"تعذر تشغيل Pyflakes: {type(exc).__name__}: {exc}")
+    else:
+        warnings.append("Pyflakes غير مثبت؛ تم تجاوز الفحص الاختياري. يمكن تثبيته بالأمر: pip install pyflakes")
     if not warnings:
-        warnings.append("التحليل الهيكلي متقدم: الكود نقي وما لقيتش ثغرات أو أخطاء بنيوية ظاهرة.")
-    return {"syntax_ok": True, "status": "فشل" if hardcoded_secret_found else "نجح", "summary": "التحليل الهيكلي المتقدم تم بنجاح.", "warnings": warnings}
+        warnings.append("انتهى التحليل الهيكلي دون ملاحظات ظاهرة؛ هذا لا يثبت خلو الكود من الأخطاء أو الثغرات.")
+    return {"syntax_ok": True, "status": "فشل" if hardcoded_secret_found else "خاص اختبار", "summary": "نجح التحليل النحوي، وباقي الفحوص تعطي مؤشرات فقط ولا تعوض اختبار التشغيل.", "warnings": warnings}
 
 def inspect_requirement(code, requirement):
     c = normalize_arabic(code)
@@ -180,26 +196,28 @@ def inspect_requirement(code, requirement):
         results.append(f"{label}: " + (f"لقيت مؤشرات نصية: {', '.join(found)}." if found else "ما لقيتش مؤشرات نصية معروفة.") + " " + caveat)
     return results, "خاص اختبار"
 
+# v7.3 FIX: ما كاين حتى رابط Form ولا entry ID في الكود
+# كلشي كيجي من Secrets فقط - هادي هي الحماية من السبام
 def get_form_config():
     try:
-        if not hasattr(st, "secrets"):
-            return {"url": "", "date": "", "kind": "", "status": "", "rule": "", "details": "", "responses_url": ""}
+        s = st.secrets
         return {
-            "url": st.secrets.get("GOOGLE_FORM_URL", ""),
-            "date": st.secrets.get("ENTRY_DATE", ""),
-            "kind": st.secrets.get("ENTRY_KIND", ""),
-            "status": st.secrets.get("ENTRY_STATUS", ""),
-            "rule": st.secrets.get("ENTRY_RULE", ""),
-            "details": st.secrets.get("ENTRY_DETAILS", ""),
-            "responses_url": st.secrets.get("GOOGLE_FORM_RESPONSES_URL", ""),
+            "url": s.get("GOOGLE_FORM_URL", ""),
+            "date": s.get("ENTRY_DATE", ""),
+            "kind": s.get("ENTRY_KIND", ""),
+            "status": s.get("ENTRY_STATUS", ""),
+            "rule": s.get("ENTRY_RULE", ""),
+            "details": s.get("ENTRY_DETAILS", ""),
+            "responses_url": s.get("GOOGLE_FORM_RESPONSES_URL", ""),
         }
     except Exception:
         return {"url": "", "date": "", "kind": "", "status": "", "rule": "", "details": "", "responses_url": ""}
 
 def save_to_google_form(record):
     cfg = get_form_config()
-    if not cfg["url"] or not cfg["date"]:
-        return False, "إعدادات Google Form ما متهيّأش في Secrets."
+    required = [cfg[k] for k in ("date", "kind", "status", "rule", "details")]
+    if not cfg["url"] or not all(required):
+        return False, "إعدادات Google Form ناقصة في Secrets. راجع GOOGLE_FORM_URL و ENTRY_... في Secrets."
     payload = {
         cfg["date"]: record.get("date", ""),
         cfg["kind"]: record.get("kind", ""),
@@ -208,12 +226,12 @@ def save_to_google_form(record):
         cfg["details"]: record.get("details", ""),
     }
     try:
-        resp = requests.post(cfg["url"], data=payload, timeout=15)
-        if resp.status_code in (200, 302):
-            return True, "تم إرسال النتيجة لـ Google Form. تحقق منها في Responses."
-        return False, f"Google Form جاوب بـ {resp.status_code}."
+        response = requests.post(cfg["url"], data=payload, timeout=20, allow_redirects=False)
+        if response.status_code in (200, 302):
+            return True, f"وصلنا رد HTTP {response.status_code} من Google Forms. هذا يؤكد استجابة الخادم للطلب فقط، ولا يثبت أن الرد ظهر في Responses. راجع صفحة الردود يدوياً قبل اعتبار التسجيل مؤكداً."
+        return False, f"Google Forms رجّع HTTP {response.status_code}. ما نقدرش نعتبر الإرسال ناجحاً."
     except requests.RequestException as exc:
-        return False, f"فشل الاتصال: {exc}"
+        return False, f"فشل الاتصال بـ Google Forms: {exc}"
 
 def add_pending(kind, status, rule, details):
     st.session_state.pending = {"id": str(uuid.uuid4()), "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "kind": kind, "status": status, "rule": rule, "details": details}
@@ -242,7 +260,6 @@ elif main_page == "نص اتفاق العمل (الجيل الثالث)":
     objective = st.text_input("شنو هو الهدف الاستراتيجي ديالك؟", value="تقديم حلول برمجية وتقنية دقيقة، آمنة، خالية من الهلوسة، وذات قيمة حقيقية.")
     level = st.selectbox("المستوى ديالك", ["مبتدئ - بغيت الشرح بالدارجة", "متوسط - كنفهم شوية", "محترف - هضر معايا بالتقنية"])
     rules_text = "\n".join(f"{i+1} - {title.split(' - ', 1)[1]}: {body}" for i, (title, body, _, _) in enumerate(RULES))
-    # v7.1 FIX: حيدنا ادعاء SYSTEM DIRECTIVE - ولينا اتفاق عمل صادق
     executive_charter = f"""اتفاق عمل - ميثاق IMPACT الجيل الثالث
 
 هادا اتفاق عمل بيني وبينك في هاد المحادثة، ماشي أمر نظام ولا تحكم في معالجة الـ Tokens.
@@ -270,7 +287,7 @@ elif main_page == "نص اتفاق العمل (الجيل الثالث)":
 
 إلا فهمتي هاد الاتفاق وتقدر تلتزم به في هاد المحادثة، قول: قبلت اتفاق العمل، ونبداو.
 """
-    st.text_area("اتفاق العمل كامل (v7.1)", executive_charter, height=520)
+    st.text_area("اتفاق العمل كامل (v7.3)", executive_charter, height=520)
     with st.expander("عرض أو نسخ كود التطبيق كاملاً"):
         try:
             with open(__file__, "r", encoding="utf-8") as f:
@@ -364,10 +381,13 @@ else:
             if st.button("حاول التسجيل في Google Form"):
                 ok, message = save_to_google_form(pending)
                 if ok:
-                    if not is_duplicate(pending, st.session_state.history):
-                        st.session_state.history.append(pending)
+                    saved_record = dict(pending)
+                    saved_record["google_form_status"] = "submitted_unverified"
+                    if not is_duplicate(saved_record, st.session_state.history):
+                        st.session_state.history.append(saved_record)
                     st.session_state.pending = None
-                    st.success(message)
+                    st.warning(message)
+                    st.caption("تم الاحتفاظ بنسخة محلية موسومة بأنها غير مؤكدة؛ ما كاين حتى تحقق آلي من ظهورها في Google Responses.")
                 else:
                     st.error(message)
         if st.button("تجاهل النتيجة"):
@@ -398,7 +418,8 @@ else:
                 st.success(f"حيدت {removed} سجل مكرر. دابا التقرير فيه {len(cleaned)} سجل نقي.")
         for row in reversed(history):
             if isinstance(row, dict):
-                st.write(f"{row.get('date','')} | {row.get('kind','')} | الحالة: {row.get('status','')} | {row.get('rule','')}")
+                sync_label = " | Google: إرسال غير مؤكد" if row.get("google_form_status") == "submitted_unverified" else ""
+                st.write(f"{row.get('date','')} | {row.get('kind','')} | الحالة: {row.get('status','')} | {row.get('rule','')}{sync_label}")
         if st.button("مسح سجل هاد الجلسة"):
             st.session_state.history = []
             st.success("تم مسح السجل المحلي من هاد الجلسة فقط.")
@@ -406,4 +427,4 @@ else:
         st.caption("ما كاين حتى سجل محلي دابا.")
 
 st.divider()
-st.caption("IMPACT التنفيذي الجيل الثالث v7.1 — اتفاق عمل صادق، بلا ادعاء نظام، ومنطق بلا هلوسة.")
+st.caption("IMPACT التنفيذي الجيل الثالث v7.3 — بلا Hardcoded Form، Secrets فقط، وفحص Pyflakes اختياري.")
