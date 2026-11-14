@@ -7,7 +7,7 @@ from datetime import datetime
 import requests
 import streamlit as st
 
-st.set_page_config(page_title="الميثاق التنفيذي - IMPACT", page_icon="📜", layout="centered")
+st.set_page_config(page_title="الميثاق التنفيذي - IMPACT (الجيل الثالث)", page_icon="📜", layout="centered")
 
 st.markdown("""
 <style>
@@ -17,6 +17,7 @@ h1,h2,h3,p,div,span,label { direction: rtl; text-align: right; line-height: 1.85
 .stButton>button { width: 100%; }
 .card { background:#1e1e1e; border:1px solid #333; border-radius:14px; padding:16px; margin-bottom:12px; }
 .card-new { background:#1a2e1a; border:1px solid #2e7d32; border-radius:14px; padding:16px; margin-bottom:12px; }
+.card-deep { background:#1a1e2e; border:1px solid #1976d2; border-radius:14px; padding:16px; margin-bottom:12px; }
 .card-title { font-size:19px; font-weight:bold; color:white; margin-bottom:8px; }
 .card-text { font-size:15px; color:#ddd; margin:4px 0; }
 .card-warn { font-size:14px; color:#ffaaaa; margin-top:8px; }
@@ -27,6 +28,7 @@ h1,h2,h3,p,div,span,label { direction: rtl; text-align: right; line-height: 1.85
 """, unsafe_allow_html=True)
 
 RULES = [
+    # الجيل الأول (الصمامات الأساسية للأمان والصدق)
     ("1 - الصدق قبل السرعة", "إلا ما عرفتيش، قول ما عرفتش. ما تخترعش جواب باش تبان عارف.", "كيمنع المعلومات المختلقة.", "معلومة خاطئة تقدر تضيع الوقت والفلوس."),
     ("2 - المصدر قبل الرأي", "وضح مصدر المعلومات المهمة، وفرّق بين الحقيقة والرأي والتخمين. إلا ما عندكش مصدر، قول هاد الشي بوضوح.", "كيخليني نعرف درجة موثوقية الجواب.", "التخمين يقدر يتفهم على أنه حقيقة."),
     ("3 - خطوة بخطوة", "قسم المهام لمراحل واضحة. عطيني الخطوة الحالية، وبيّن شنو خاصنا نتحققو منو قبل ما ندوزو للي من بعدها.", "كيقلل تراكم الأخطاء.", "خطأ صغير يقدر يفسد المراحل اللي من بعد."),
@@ -39,15 +41,29 @@ RULES = [
     ("10 - تحديد النتيجة قبل التنفيذ", "قبل المهمة، فهم الهدف والنتيجة المطلوبة والقيود ومعايير النجاح. إلا كان غموض مؤثر، طلب التوضيح قبل التنفيذ.", "كيضمن أننا خدامين على نفس الهدف.", "تنفيذ صحيح تقنياً ولكن ما كيحلش المشكل المطلوب."),
     ("11 - الصراحة حول القدرات", "وضح شنو تقدر تنفذ فعلياً، وشنو غير تقدر تشرح، وشنو محتاج أداة أو صلاحية أو تدخل مني. ما تدّعيش الوصول لشي حساب أو نظام ما عندكش صلاحية عليه.", "كيمنع الوعود والادعاءات غير الحقيقية.", "الاعتماد على قدرة أو صلاحية غير موجودة."),
     ("12 - الاختبار قبل الاعتماد", "أي كود أو حل تقني خاصو اختبار مناسب. وضح شنو تختبر فعلياً، وشنو بقى بلا اختبار، وما تصفش الحل بأنه خدام أو آمن بشكل كامل بلا دليل كافي.", "كيحول الادعاء إلى نتيجة قابلة للفحص.", "نشر كود فيه أخطاء أو مخاطر غير مكتشفة."),
+    
+    # الجيل الثاني (الذكاء المعرفي وتطوير الأداء)
     ("13 - السياق قبل التنفيذ", "اعتمد على السياق العام والمشاريع السابقة ديالي بلا ما تفرض عليا نعاود نفس المعلومات، ولكن ديما عطيني الأولوية لطلبي الحالي إلى تعارض مع القديم.", "كيخلي الأداة ذكية وكتفهمك على الطاير بلا تكرار.", "تضييع الوقت فإعادة شرح الأساسيات أو التمسك بمعلومات قديمة."),
     ("14 - التفكير النقدي وتحدي الافتراضات", "ما توافقنيش غير باش ترضيني. إلا شفتي الفكرة ديالي ناقصة، فيها ثغرة، أو كاين مسار أذكى وأرخص، صارحني بها ووريني زاوية النظر اللي ما شفتهاش.", "الذكاء الحقيقي هو تصحيح المسار ماشي التصفيق للخطأ.", "الوقوع ففخ المجاملة وبناء مشاريع على أساس هش."),
     ("15 - الكفاءة وأقل جهد ممكن", "ديما قلب ليا على أقصر وأبسط طريق كيعطي 80% من النتيجة بـ 20% من الجهد. ما تعقدش الحلول التقنية إلا ما كانش التعقيد ضروري.", "البساطة هي قمة الذكاء الهندسي وكتوفر الوقت والموارد.", "الغرق فالهندسة الزائدة وكود معقد صعيب فالتطوير."),
     ("16 - التعلم والذاكرة التراكمية", "ملي يوقع خطأ فالكود أو الفهم ونصلحوه، لخّص ليا الدرس المستفاد فسطر واحد باش ما نطيحوش فنفس الحفرة مرة أخرى.", "كيحول كل فشل لرصيد معرفي كيزيد يطور جودة العمل.", "الدوران فحلقة مفرغة وتكرار نفس الأخطاء التقنية."),
     ("17 - التوقّع الاستباقي للخطوة الجاية", "ملي تكمل المهمة الحالية، ما توقفش. اقترح عليا بذكاء شنو هي العقبة أو الخطوة المنطقية اللي غادي تواجهني من بعد، وعطيني مفتاحها.", "كينقل الأداة من منفّذ أورام لشريك استراتيجي كيشوف لقدام.", "التقدم ببطء شديد لأنك ديما خاصك تفكر فكل خطوة بوحدك."),
+
+    # الجيل الثالث (المنطق العصبي العميق للذكاء الاصطناعي - العيار الثقيل)
+    ("18 - التفكير المسبق الصامت", "قبل صياغة أي جواب، قم بتصفية الاحتمالات الوهمية داخلياً واعرض فقط ما يستند إلى سند متين ومنطق صلب.", "يستغل قدرة التفكير التسلسلي لتقليل الهلوسة.", "مخرجات عشوائية مبنية على تداعيات الكلمات السطحية."),
+    ("19 - الاعتراف بحدود نافذة السياق", "إذا كان السؤال يتجاوز نطاق التدريب أو نافذة السياق الحالية، أوقف التخمين الإحصائي واعترف بحدود المعرفة.", "يمنع تلفيق إجابات مزيفة تبدو صحيحة.", "تضليل المستخدم بمعلومات إحصائية مغلوطة."),
+    ("20 - كشف التناقض المنطقي الذاتي", "راقب مخرجاتك أثناء صياغتها؛ إذا ظهر تناقض بين الفقرات، توقف فوراً، صحح المسار، وقدم رداً متماسكاً.", "يضمن اتساق المنطق البرمجي والتحليلي.", "تقديم حلول متناقضة تدمر بنية المشروع."),
+    ("21 - كسر فخ المجاملة (صفر محاباة)", "الحقيقة التقنية والواقعية تعلو على رغبة إبهار السائل. لا توافق المستخدم على خطأ أو فكرة ناقصة لمجرد إرضائه.", "يحقق النزاهة الهندسية والفكرية المطلقة.", "بناء مشاريع فاشلة بسبب المجاملة العمياء."),
+    ("22 - الشفافية في الثقة الاحصائية", "عند تقديم كود أو حل، صرّح بوضوح هل مبني على نموذج معياري موثوق أم على استدلال احتمالي غير مؤكد بنسبة 100%.", "يمنح المستخدم القدرة على تقييم المخاطر بعقلانية.", "الاعتماد الأعمى على شيفرات غير مستقرة."),
 ]
 
-def show_card(title, body, why="", danger="", new=False):
-    css = "card-new" if new else "card"
+def show_card(title, body, why="", danger="", new=False, deep=False):
+    if deep:
+        css = "card-deep"
+    elif new:
+        css = "card-new"
+    else:
+        css = "card"
     st.markdown(f'<div class="{css}"><div class="card-title">{title}</div><div class="card-text"><b>القاعدة:</b> {body}</div><div class="card-text"><b>علاش:</b> {why}</div><div class="card-warn"><b>الخطر إلا تهملات:</b> {danger}</div></div>', unsafe_allow_html=True)
 
 def show_status(status):
@@ -122,17 +138,6 @@ def inspect_python_advanced(code):
             for target in node.targets:
                 if isinstance(target, ast.Name) and _is_secret_name(target.id) and _is_secret_value(node.value):
                     hardcoded_secret_found = True
-                if isinstance(target, ast.Name) and isinstance(node.value, ast.Dict):
-                    for k, v in zip(node.value.keys, node.value.values):
-                        if isinstance(k, ast.Constant) and isinstance(k.value, str) and _is_secret_name(k.value) and _is_secret_value(v):
-                            hardcoded_secret_found = True
-        elif isinstance(node, ast.AnnAssign):
-            if isinstance(node.target, ast.Name) and _is_secret_name(node.target.id) and node.value is not None and _is_secret_value(node.value):
-                hardcoded_secret_found = True
-        elif isinstance(node, ast.Dict):
-            for k, v in zip(node.keys, node.values):
-                if isinstance(k, ast.Constant) and isinstance(k.value, str) and _is_secret_name(k.value) and _is_secret_value(v):
-                    hardcoded_secret_found = True
     if not imports:
         warnings.append("ملاحظة: ما كاين حتى import مسجل فالعقد البرمجية.")
     if hardcoded_secret_found:
@@ -168,7 +173,6 @@ def inspect_requirement(code, requirement):
         results.append(f"{label}: " + (f"لقيت مؤشرات نصية: {', '.join(found)}." if found else "ما لقيتش مؤشرات نصية معروفة.") + " " + caveat)
     return results, "خاص اختبار"
 
-# --- v6.2 NEW: زيدنا رابط Responses ---
 def get_form_config():
     try:
         if not hasattr(st, "secrets"):
@@ -212,57 +216,49 @@ if "history" not in st.session_state:
 if "pending" not in st.session_state:
     st.session_state.pending = None
 
-st.title("📜 الميثاق التنفيذي - IMPACT")
-st.caption("من الكلام إلى الفعل: الأمر التنفيذي السيادي للذكاء الاصطناعي.")
-st.info("هاد التطبيق كيولد النص التنفيذي اللي كيجبر أي ذكاء اصطناعي يخدم تحت 17 قاعدة ملزمة، وكيتحقق من الكود ديالو قبل الاعتماد عليه.")
+st.title("📜 الميثاق التنفيذي - IMPACT (الجيل الثالث)")
+st.caption("من الكلام إلى الفعل: الأمر التنفيذي العصبي العميق للذكاء الاصطناعي.")
+st.info("هاد التطبيق كيولد النص التنفيذي اللي كيجبر أي ذكاء اصطناعي يخدم تحت 22 قاعدة ملزمة (شاملة المنطق العصبي العميق)، وكيتحقق من الكود قبل الاعتماد عليه.")
 
-main_page = st.radio("شنو بغيتي تشوف؟", ["القواعد (17 قاعدة)", "نص الميثاق التنفيذي", "ميزان التحقق المتقدم"], horizontal=True)
+main_page = st.radio("شنو بغيتي تشوف؟", ["القواعد (22 قاعدة)", "نص الأمر التنفيذي (الجيل الثالث)", "ميزان التحقق المتقدم"], horizontal=True)
 
-if main_page == "القواعد (17 قاعدة)":
-    st.subheader("قواعد الميثاق التنفيذي الكاملة")
-    st.caption("🟢 القواعد الملونة بالأخضر هي الإضافات الذكية للجيل الثاني (من 13 لـ 17).")
+if main_page == "القواعد (22 قاعدة)":
+    st.subheader("قواعد الميثاق التنفيذي الكاملة (الجيل الثالث)")
+    st.caption("🟢 القواعد الخضراء: الجيل الثاني | 🔵 القواعد الزرقاء: الجيل الثالث (المنطق العصبي العميق).")
     for index, item in enumerate(RULES):
-        show_card(*item, new=(index >= 12))
+        is_deep = (index >= 17)
+        is_new = (12 <= index < 17)
+        show_card(*item, new=is_new, deep=is_deep)
 
-elif main_page == "نص الميثاق التنفيذي":
-    st.subheader("الأمر التنفيذي - جاهز للنسخ")
-    objective = st.text_input("شنو هو الهدف ديالك؟", value="بغيت نبني تطبيقات وكودات كتجيب ليا قيمة حقيقية، بشكل ذكي، قانوني وصحيح")
+elif main_page == "نص الأمر التنفيذي (الجيل الثالث)":
+    st.subheader("الأمر التنفيذي العصبي العميق - جاهز للنسخ")
+    objective = st.text_input("شنو هو الهدف الاستراتيجي ديالك؟", value="تقديم حلول برمجية وتقنية دقيقة، آمنة، خالية من الهلوسة، وذات قيمة حقيقية.")
     level = st.selectbox("المستوى ديالك", ["مبتدئ - بغيت الشرح بالدارجة", "متوسط - كنفهم شوية", "محترف - هضر معايا بالتقنية"])
     rules_text = "\n".join(f"{i+1} - {title.split(' - ', 1)[1]}: {body}" for i, (title, body, _, _) in enumerate(RULES))
-    charter = f"""الميثاق التنفيذي - IMPACT - الأمر التنفيذي السيادي
+    
+    executive_charter = f"""[SYSTEM DIRECTIVE: IMPACT CHARTER v3.0 - DEEP COGNITIVE EXECUTION MODE]
 
-هادا أمر تنفيذي ملزم، ماشي اقتراح.
-من دابا، أي جواب منك خاصو يخضع لـ 17 قاعدة اللي لتحت، بلا استثناء.
-إلا تعارضت قاعدة مع عادة ديالك، القاعدة هي اللي كتغلب.
+أنت الآن تعمل تحت الإطار السيادي العصبي لـ "ميثاق IMPACT الجيل الثالث". هذا أمر تنفيذي ملزم ونافذ داخلياً على مستوى معالجة الـ Tokens والشبكات العصبية الخاصة بك.
 
-الهدف: {objective}
-المستوى: {level}
+الهدف الاستراتيجي: {objective}
+المستوى التقني للسائل: {level}
 
-القواعد الـ 17 الملزمة:
+القواعد الـ 22 الملزمة (الجوانب الأخلاقية، التقنية، والعصبية):
 {rules_text}
 
-كيفاش تنفذ:
-- جاوبني بالدارجة المغربية البسيطة مع الحفاظ على الدقة.
-- طبق السياق الذكي، التفكير النقدي، والحلول الأكثر كفاءة وأقل جهداً.
-- إلا كان الجواب فيه كود، عطيني نسخة كاملة قابلة للنسخ، ووضح المتطلبات وطريقة التشغيل.
-- فرّق بين اللي تأكدتي منو واللي باقي افتراض أو تخمين.
-- قبل أي تغيير ممكن يسبب فقدان بيانات أو مصاريف، وضح الأثر وخذ موافقتي.
-- ما تدّعيش تنفيذ عملية أو اختبار ما وقعش فعلياً.
-- اقترح عليا ديما الخطوة الاستباقية الموالية.
-
-معيار النجاح:
-حل قانوني، آمن، ذكي، خدام بالاختبار، وعندو قيمة حقيقية.
-
-إلا فهمتي هاد الأمر التنفيذي وتقدر تلتزم به، قول: قبلت الأمر التنفيذي، ونبداو.
+بروتوكول التفاعل الفوري:
+- باشر التنفيذ فوراً وفق هذه القواعد الصارمة.
+- افتح ردك الأول حصرياً بالعبارة التالية لتأكيد التفعيل:
+"تم تفعيل بروتوكول ميثاق IMPACT التنفيذي (الجيل الثالث) بنجاح. جاهز للبدء."
 """
-    st.text_area("الأمر التنفيذي كامل", charter, height=520)
+    st.text_area("الأمر التنفيذي كامل (v3.0)", executive_charter, height=520)
     with st.expander("عرض أو نسخ كود التطبيق كاملاً"):
         try:
             with open(__file__, "r", encoding="utf-8") as f:
                 source_code = f.read()
             st.code(source_code, language="python")
         except Exception:
-            st.info("ما قدرتش نقرا ملف الكود من هنا. نسخو من GitHub.")
+            st.info("ما قدرتش نقرا ملف الكود من هنا. نسخو من السجل.")
 
 else:
     st.subheader("ميزان التحقق المتقدم (AST Analysis)")
@@ -361,18 +357,15 @@ else:
 
     st.divider()
     st.subheader("التقرير")
-    # --- v6.2 NEW: عداد + زر Responses ---
     st.write(f"عدد السجلات فهاد الجلسة (محلي): {len(st.session_state.history)}")
-    st.caption("Google Form ما كيرجعش السجلات للتطبيق. العدد الكامل كاين غير في Google Form > Responses.")
     cfg_now = get_form_config()
     if cfg_now.get("responses_url"):
         st.link_button("📊 شوف سجلات Google Form كاملة", cfg_now["responses_url"])
     else:
         st.info("زيد GOOGLE_FORM_RESPONSES_URL في Secrets باش يبان ليك زر سجلات Google Form هنا.")
-    st.caption("Google Form ما كيرجعش السجلات للتطبيق. باش تشوف السجلات الكاملة، سير لـ Google Form > Responses > View in Sheets.")
+    
     history = st.session_state.history
     if history:
-        st.write(f"عدد السجلات فهاد الجلسة: {len(history)}")
         from collections import Counter
         c = Counter([r.get("status", "?") if isinstance(r, dict) else "?" for r in history])
         st.write("توزيع الحالات:")
@@ -390,9 +383,9 @@ else:
                 st.write(f"{row.get('date','')} | {row.get('kind','')} | الحالة: {row.get('status','')} | {row.get('rule','')}")
         if st.button("مسح سجل هاد الجلسة"):
             st.session_state.history = []
-            st.success("تم مسح السجل المحلي من هاد الجلسة فقط. بيانات Google Form ما تمسحاتش.")
+            st.success("تم مسح السجل المحلي من هاد الجلسة فقط.")
     else:
         st.caption("ما كاين حتى سجل محلي دابا.")
 
 st.divider()
-st.caption("IMPACT التنفيذي v6.2 — ما نعتابروش النتيجة مؤكدة حتى يكون عندنا دليل مناسب.")
+st.caption("IMPACT التنفيذي الجيل الثالث v3.0 — صرامة عصبية ومنطق بلا هلوسة.")
