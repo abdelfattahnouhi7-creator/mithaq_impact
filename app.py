@@ -2,14 +2,46 @@ import ast
 import hashlib
 import importlib.util
 import io
+import json
+import os
 import re
+import sys
+import threading
+import traceback
 import uuid
+from contextlib import redirect_stdout, redirect_stderr
 from datetime import datetime
 
 import requests
 import streamlit as st
 
 st.set_page_config(page_title="الميثاق التنفيذي - IMPACT (الجيل الثالث)", page_icon="📜", layout="centered")
+
+# ---------- v8: الحماية بكلمة سر ----------
+def get_app_password():
+    try:
+        return st.secrets.get("IMPACT_PASSWORD", "")
+    except Exception:
+        return ""
+
+APP_PASSWORD = get_app_password()
+
+if APP_PASSWORD:
+    if "authed" not in st.session_state:
+        st.session_state.authed = False
+    if not st.session_state.authed:
+        st.title("🔒 IMPACT - دخول خاص")
+        st.info("هاد التطبيق محمي بكلمة سر. دخلها باش تكمل.")
+        pw = st.text_input("كلمة السر", type="password")
+        if st.button("دخول"):
+            if pw == APP_PASSWORD:
+                st.session_state.authed = True
+                st.rerun()
+            else:
+                st.error("كلمة السر غالطة.")
+        st.stop()
+else:
+    st.warning("⚠️ التطبيق مفتوح للجميع حيت ما كاينش IMPACT_PASSWORD في Secrets. إلا بغيتيه خاص بيك، زيد IMPACT_PASSWORD في Secrets.")
 
 st.markdown("""
 <style>
@@ -55,12 +87,7 @@ RULES = [
 ]
 
 def show_card(title, body, why="", danger="", new=False, deep=False):
-    if deep:
-        css = "card-deep"
-    elif new:
-        css = "card-new"
-    else:
-        css = "card"
+    css = "card-deep" if deep else ("card-new" if new else "card")
     st.markdown(f'<div class="{css}"><div class="card-title">{title}</div><div class="card-text"><b>القاعدة:</b> {body}</div><div class="card-text"><b>علاش:</b> {why}</div><div class="card-warn"><b>الخطر إلا تهملات:</b> {danger}</div></div>', unsafe_allow_html=True)
 
 def show_status(status):
@@ -84,25 +111,64 @@ def fingerprint(rec):
 
 def is_duplicate(rec, history):
     fp = fingerprint(rec)
-    for h in history:
-        if isinstance(h, dict) and fingerprint(h) == fp:
-            return True
-    return False
+    return any(isinstance(h, dict) and fingerprint(h) == fp for h in history)
 
 def dedupe_history(history):
-    seen = set()
-    out = []
-    removed = 0
+    seen = set(); out = []; removed = 0
     for h in history:
-        if not isinstance(h, dict):
-            continue
+        if not isinstance(h, dict): continue
         fp = fingerprint(h)
-        if fp in seen:
-            removed += 1
-            continue
-        seen.add(fp)
-        out.append(h)
+        if fp in seen: removed += 1; continue
+        seen.add(fp); out.append(h)
     return out, removed
+
+# ---------- v8: الحفظ الدائم ----------
+HISTORY_FILE = "impact_history.json"
+
+def load_history_from_disk():
+    try:
+        if os.path.exists(HISTORY_FILE):
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list): return data
+    except Exception:
+        pass
+    return []
+
+def save_history_to_disk(history):
+    try:
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception:
+        return False
+
+# ---------- v8: التنفيذ الفعلي Sandbox ----------
+BLOCKED_PATTERNS = ["os.", "sys.", "subprocess", "open(", "__import__", "eval(", "exec(", "socket", "shutil", "pathlib", "input("]
+
+def run_python_sandbox(code, timeout_sec=3):
+    """كيشغل الكود في Sandbox محدود. ممنوع الملفات والشبكة والأوامر."""
+    for pat in BLOCKED_PATTERNS:
+        if pat in code:
+            return False, "", f"⛔ ممنوع في Sandbox: لقيت '{pat}'. هاد التنفيذ محمي - ما كيسمحش بالملفات أو الشبكة أو أوامر النظام. حيد هاد السطر وجرب تاني."
+    out_buf = io.StringIO(); err_buf = io.StringIO()
+    result = {"done": False, "exc": None}
+    def _target():
+        try:
+            safe_builtins = {"print": print, "len": len, "range": range, "str": str, "int": int, "float": float, "list": list, "dict": dict, "set": set, "tuple": tuple, "sum": sum, "min": min, "max": max, "abs": abs, "round": round, "sorted": sorted, "enumerate": enumerate, "zip": zip}
+            g = {"__builtins__": safe_builtins}
+            with redirect_stdout(out_buf), redirect_stderr(err_buf):
+                exec(code, g, {})
+            result["done"] = True
+        except Exception as e:
+            result["exc"] = traceback.format_exc(limit=3)
+    t = threading.Thread(target=_target, daemon=True)
+    t.start(); t.join(timeout=timeout_sec)
+    if t.is_alive():
+        return False, out_buf.getvalue(), "⏱️ الكود خذا أكثر من 3 ثواني - وقفناه باش ما يبلوكيش التطبيق. يمكن فيه boucle لا نهائية."
+    if result["exc"]:
+        return False, out_buf.getvalue(), result["exc"]
+    return True, out_buf.getvalue(), err_buf.getvalue()
 
 def _is_secret_name(name):
     name = str(name).lower()
@@ -116,11 +182,7 @@ def inspect_python_advanced(code):
         tree = ast.parse(code)
     except SyntaxError as exc:
         return {"syntax_ok": False, "status": "فشل", "summary": f"خطأ نحوي فالسطر {exc.lineno}: {exc.msg}", "warnings": ["الكود ما دازش من التحليل النحوي."]}
-    warnings = []
-    imports = set()
-    has_try_except = False
-    hardcoded_secret_found = False
-    empty_functions = 0
+    warnings = []; imports = set(); has_try_except = False; hardcoded_secret_found = False; empty_functions = 0
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imports.update(alias.asname or alias.name.split(".")[0] for alias in node.names)
@@ -151,15 +213,14 @@ def inspect_python_advanced(code):
     if hardcoded_secret_found:
         warnings.append("⚠️ خطر أمني محتمل: لقيت مفتاح سري أو كلمة مرور مكتوبة مباشرة داخل الكود (Hardcoded Secret).")
     if empty_functions > 0:
-        warnings.append(f"تنبيه: لقيت {empty_functions} دالة فارغة فيها غير (pass) وما مكتوباش فيها اللوجيك ديالها.")
+        warnings.append(f"تنبيه: لقيت {empty_functions} دالة فارغة فيها غير (pass).")
     if not has_try_except and ("requests." in code or "open(" in code):
         warnings.append("ملاحظة جودة: الكود فيه عمليات إدخال/إخراج أو طلبات شبكة بدون حماية (Try/Except).")
     if importlib.util.find_spec("pyflakes") is not None:
         try:
             from pyflakes.api import check
             from pyflakes.reporter import Reporter
-            output = io.StringIO()
-            reporter = Reporter(output, output)
+            output = io.StringIO(); reporter = Reporter(output, output)
             issue_count = check(code, "<الكود المدخل>", reporter=reporter)
             if issue_count:
                 warnings.append(f"Pyflakes رصد {issue_count} ملاحظة محتملة:\n{output.getvalue().strip()}")
@@ -168,15 +229,13 @@ def inspect_python_advanced(code):
         except Exception as exc:
             warnings.append(f"تعذر تشغيل Pyflakes: {type(exc).__name__}: {exc}")
     else:
-        warnings.append("Pyflakes غير مثبت؛ تم تجاوز الفحص الاختياري. يمكن تثبيته بالأمر: pip install pyflakes")
+        warnings.append("Pyflakes غير مثبت؛ تم تجاوز الفحص الاختياري.")
     if not warnings:
-        warnings.append("انتهى التحليل الهيكلي دون ملاحظات ظاهرة؛ هذا لا يثبت خلو الكود من الأخطاء أو الثغرات.")
+        warnings.append("انتهى التحليل الهيكلي دون ملاحظات ظاهرة؛ هذا لا يثبت خلو الكود من الأخطاء.")
     return {"syntax_ok": True, "status": "فشل" if hardcoded_secret_found else "خاص اختبار", "summary": "نجح التحليل النحوي، وباقي الفحوص تعطي مؤشرات فقط ولا تعوض اختبار التشغيل.", "warnings": warnings}
 
 def inspect_requirement(code, requirement):
-    c = normalize_arabic(code)
-    r = normalize_arabic(requirement)
-    checks = []
+    c = normalize_arabic(code); r = normalize_arabic(requirement); checks = []
     if any(word in r for word in ["حفظ", "سجل", "تسجيل"]):
         patterns = ["write(", "to_csv(", "to_sql(", "insert(", "commit(", "save(", "json.dump", "open("]
         found = [p for p in patterns if p in c]
@@ -196,20 +255,11 @@ def inspect_requirement(code, requirement):
         results.append(f"{label}: " + (f"لقيت مؤشرات نصية: {', '.join(found)}." if found else "ما لقيتش مؤشرات نصية معروفة.") + " " + caveat)
     return results, "خاص اختبار"
 
-# v7.3 FIX: ما كاين حتى رابط Form ولا entry ID في الكود
-# كلشي كيجي من Secrets فقط - هادي هي الحماية من السبام
+# v8: بلا Hardcoded Form - Secrets فقط
 def get_form_config():
     try:
         s = st.secrets
-        return {
-            "url": s.get("GOOGLE_FORM_URL", ""),
-            "date": s.get("ENTRY_DATE", ""),
-            "kind": s.get("ENTRY_KIND", ""),
-            "status": s.get("ENTRY_STATUS", ""),
-            "rule": s.get("ENTRY_RULE", ""),
-            "details": s.get("ENTRY_DETAILS", ""),
-            "responses_url": s.get("GOOGLE_FORM_RESPONSES_URL", ""),
-        }
+        return {"url": s.get("GOOGLE_FORM_URL", ""), "date": s.get("ENTRY_DATE", ""), "kind": s.get("ENTRY_KIND", ""), "status": s.get("ENTRY_STATUS", ""), "rule": s.get("ENTRY_RULE", ""), "details": s.get("ENTRY_DETAILS", ""), "responses_url": s.get("GOOGLE_FORM_RESPONSES_URL", "")}
     except Exception:
         return {"url": "", "date": "", "kind": "", "status": "", "rule": "", "details": "", "responses_url": ""}
 
@@ -217,19 +267,13 @@ def save_to_google_form(record):
     cfg = get_form_config()
     required = [cfg[k] for k in ("date", "kind", "status", "rule", "details")]
     if not cfg["url"] or not all(required):
-        return False, "إعدادات Google Form ناقصة في Secrets. راجع GOOGLE_FORM_URL و ENTRY_... في Secrets."
-    payload = {
-        cfg["date"]: record.get("date", ""),
-        cfg["kind"]: record.get("kind", ""),
-        cfg["status"]: record.get("status", ""),
-        cfg["rule"]: record.get("rule", ""),
-        cfg["details"]: record.get("details", ""),
-    }
+        return False, "إعدادات Google Form ناقصة في Secrets."
+    payload = {cfg["date"]: record.get("date", ""), cfg["kind"]: record.get("kind", ""), cfg["status"]: record.get("status", ""), cfg["rule"]: record.get("rule", ""), cfg["details"]: record.get("details", "")}
     try:
         response = requests.post(cfg["url"], data=payload, timeout=20, allow_redirects=False)
         if response.status_code in (200, 302):
-            return True, f"وصلنا رد HTTP {response.status_code} من Google Forms. هذا يؤكد استجابة الخادم للطلب فقط، ولا يثبت أن الرد ظهر في Responses. راجع صفحة الردود يدوياً قبل اعتبار التسجيل مؤكداً."
-        return False, f"Google Forms رجّع HTTP {response.status_code}. ما نقدرش نعتبر الإرسال ناجحاً."
+            return True, f"وصلنا رد HTTP {response.status_code} من Google Forms. هذا يؤكد استجابة الخادم فقط، ولا يثبت أن الرد ظهر في Responses. راجع صفحة الردود يدوياً."
+        return False, f"Google Forms رجّع HTTP {response.status_code}."
     except requests.RequestException as exc:
         return False, f"فشل الاتصال بـ Google Forms: {exc}"
 
@@ -237,9 +281,12 @@ def add_pending(kind, status, rule, details):
     st.session_state.pending = {"id": str(uuid.uuid4()), "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "kind": kind, "status": status, "rule": rule, "details": details}
 
 if "history" not in st.session_state:
-    st.session_state.history = []
+    st.session_state.history = load_history_from_disk()
 if "pending" not in st.session_state:
     st.session_state.pending = None
+
+def persist():
+    save_history_to_disk(st.session_state.history)
 
 st.title("📜 الميثاق التنفيذي - IMPACT (الجيل الثالث)")
 st.caption("من الكلام إلى الفعل: اتفاق عمل بـ 22 قاعدة ملزمة.")
@@ -251,9 +298,7 @@ if main_page == "القواعد (22 قاعدة)":
     st.subheader("قواعد الميثاق التنفيذي الكاملة (الجيل الثالث)")
     st.caption("🟢 القواعد الخضراء: الجيل الثاني | 🔵 القواعد الزرقاء: الجيل الثالث.")
     for index, item in enumerate(RULES):
-        is_deep = (index >= 17)
-        is_new = (12 <= index < 17)
-        show_card(*item, new=is_new, deep=is_deep)
+        show_card(*item, new=(12 <= index < 17), deep=(index >= 17))
 
 elif main_page == "نص اتفاق العمل (الجيل الثالث)":
     st.subheader("اتفاق العمل - جاهز للنسخ")
@@ -287,19 +332,18 @@ elif main_page == "نص اتفاق العمل (الجيل الثالث)":
 
 إلا فهمتي هاد الاتفاق وتقدر تلتزم به في هاد المحادثة، قول: قبلت اتفاق العمل، ونبداو.
 """
-    st.text_area("اتفاق العمل كامل (v7.3)", executive_charter, height=520)
+    st.text_area("اتفاق العمل كامل (v8)", executive_charter, height=520)
     with st.expander("عرض أو نسخ كود التطبيق كاملاً"):
         try:
             with open(__file__, "r", encoding="utf-8") as f:
-                source_code = f.read()
-            st.code(source_code, language="python")
+                st.code(f.read(), language="python")
         except Exception:
             st.info("ما قدرتش نقرا ملف الكود من هنا. نسخو من GitHub.")
 
 else:
-    st.subheader("ميزان التحقق المتقدم (AST Analysis)")
-    st.caption("فحص هيكلي ذكي للكود يكتشف الأخطاء النحوية، الدوال الفارغة، غياب حماية الاستثناءات، والمفاتيح المكشوفة.")
-    section = st.radio("اختار نوع الفحص", ["فحص نحوي والهيكلي للكود", "مؤشرات تحقيق الشرط", "مراجعة رقم ومصدر"])
+    st.subheader("ميزان التحقق المتقدم (AST + Pyflakes + Runtime Sandbox)")
+    st.caption("فحص هيكلي + تنفيذ فعلي في Sandbox محمي. ممنوع الملفات والشبكة وأوامر النظام.")
+    section = st.radio("اختار نوع الفحص", ["فحص نحوي والهيكلي للكود", "تنفيذ فعلي في Sandbox (جديد v8)", "مؤشرات تحقيق الشرط", "مراجعة رقم ومصدر"])
 
     if section == "فحص نحوي والهيكلي للكود":
         code_input = st.text_area("لصق كود Python هنا", height=260)
@@ -309,15 +353,32 @@ else:
             else:
                 result = inspect_python_advanced(code_input)
                 show_status(result["status"])
-                if result["syntax_ok"]:
-                    st.success(result["summary"])
-                else:
-                    st.error(result["summary"])
+                if result["syntax_ok"]: st.success(result["summary"])
+                else: st.error(result["summary"])
                 with st.expander("تفاصيل التحذيرات والملاحظات التقنية", expanded=True):
-                    for warning in result["warnings"]:
-                        st.markdown(f"- {warning}")
+                    for w in result["warnings"]: st.markdown(f"- {w}")
                 add_pending("كود - تحليل هيكلي متقدم", result["status"], "القاعدة 12 - الاختبار قبل الاعتماد", result["summary"])
-                st.info("التحليل الهيكلي كيعطيك مؤشرات بنيوية، ولكن ما كيعوضش التشغيل الفعلي (Runtime Test).")
+                st.info("التحليل الهيكلي كيعطيك مؤشرات بنيوية، ولكن ما كيعوضش التشغيل الفعلي.")
+
+    elif section == "تنفيذ فعلي في Sandbox (جديد v8)":
+        st.warning("⚠️ Sandbox للاختبار فقط: ممنوع open() / os / requests / input / eval. المسموح: print / حسابات / list / dict / دوال بسيطة. المدة القصوى 3 ثواني.")
+        code_run = st.text_area("لصق كود Python بسيط للتنفيذ", value='print("hello IMPACT")\nprint(2 + 3)', height=180)
+        if st.button("شغّل الكود فعلياً ▶️", key="run_sandbox"):
+            if not code_run.strip():
+                st.warning("لصق الكود الأول.")
+            else:
+                ok, out, err = run_python_sandbox(code_run)
+                if ok:
+                    show_status("نجح")
+                    st.success("الكود خدم فعلياً في Sandbox - هادي هي أول مرة كنقولو نجح بالدليل في v8.")
+                    if out: st.code(out, language="text")
+                    add_pending("كود - تنفيذ فعلي Sandbox", "نجح", "القاعدة 12 - الاختبار قبل الاعتماد", f"مخرجات: {out[:200]}")
+                else:
+                    show_status("فشل")
+                    st.error("التنفيذ فشل أو تمنع:")
+                    if out: st.code(f"المخرجات قبل الفشل:\n{out}", language="text")
+                    st.code(err, language="text")
+                    add_pending("كود - تنفيذ فعلي Sandbox", "فشل", "القاعدة 12 - الاختبار قبل الاعتماد", f"خطأ: {err[:200]}")
 
     elif section == "مؤشرات تحقيق الشرط":
         code_input = st.text_area("الكود", height=220)
@@ -328,8 +389,7 @@ else:
             else:
                 results, status = inspect_requirement(code_input, requirement)
                 show_status(status)
-                for item in results:
-                    st.write("• " + item)
+                for item in results: st.write("• " + item)
                 add_pending("كود - مؤشرات الشرط", status, "القاعدة 8 - الفعل قبل الكلام", "تحليل نصي فقط؛ خاص اختبار فعلي.")
                 st.info("ما عطيناش نجح ولا فشل نهائي لأن وجود كلمة فالكود ما كيثبتش وقوع الفعل.")
 
@@ -346,17 +406,11 @@ else:
                 if numbers:
                     st.write("الأرقام اللي لقيت:", ", ".join(numbers))
                     if not (has_link or has_source_words):
-                        show_status("فشل")
-                        st.error("كاينين أرقام وما بانش مصدر واضح فالنص. طلب المصدر والتاريخ والوحدة.")
-                        status_num = "فشل"
+                        show_status("فشل"); st.error("كاينين أرقام وما بانش مصدر واضح فالنص."); status_num = "فشل"
                     else:
-                        show_status("خاص اختبار")
-                        st.warning("بانت إشارة لمصدر، ولكن خاص التحقق واش المصدر حقيقي وكيدعم الرقم.")
-                        status_num = "خاص اختبار"
+                        show_status("خاص اختبار"); st.warning("بانت إشارة لمصدر، ولكن خاص التحقق."); status_num = "خاص اختبار"
                 else:
-                    show_status("خاص اختبار")
-                    st.info("ما لقيتش أرقام واضحة فالنص.")
-                    status_num = "خاص اختبار"
+                    show_status("خاص اختبار"); st.info("ما لقيتش أرقام واضحة فالنص."); status_num = "خاص اختبار"
                 add_pending("معلومة - مراجعة أولية", status_num, "القاعدة 2 و9 - المصدر والأرقام", "الفحص النصي ما تحققش من صحة المصدر.")
 
     st.divider()
@@ -364,39 +418,31 @@ else:
     pending = st.session_state.pending
     if pending:
         st.write(f"النتيجة المعلقة: {pending['kind']} — الحالة: {pending['status']}")
-        show_status(pending["status"])
-        st.write(pending["details"])
+        show_status(pending["status"]); st.write(pending["details"])
         if is_duplicate(pending, st.session_state.history):
             st.warning("⚠️ هاد النتيجة مسجلة من قبل في هاد الجلسة.")
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("سجل محلياً"):
+            if st.button("سجل محلياً (دائم v8)"):
                 if is_duplicate(pending, st.session_state.history):
                     st.error("ما تسجلاتش - هادي مكررة.")
                 else:
-                    st.session_state.history.append(pending)
-                    st.session_state.pending = None
-                    st.success("تسجلات فالجلسة الحالية فقط.")
+                    st.session_state.history.append(pending); persist(); st.session_state.pending = None; st.success("تسجلات وتتحفظات في impact_history.json - غادي تبقى إلا تسدات الصفحة.")
         with col2:
             if st.button("حاول التسجيل في Google Form"):
                 ok, message = save_to_google_form(pending)
                 if ok:
-                    saved_record = dict(pending)
-                    saved_record["google_form_status"] = "submitted_unverified"
-                    if not is_duplicate(saved_record, st.session_state.history):
-                        st.session_state.history.append(saved_record)
-                    st.session_state.pending = None
-                    st.warning(message)
-                    st.caption("تم الاحتفاظ بنسخة محلية موسومة بأنها غير مؤكدة؛ ما كاين حتى تحقق آلي من ظهورها في Google Responses.")
-                else:
-                    st.error(message)
+                    saved = dict(pending); saved["google_form_status"] = "submitted_unverified"
+                    if not is_duplicate(saved, st.session_state.history):
+                        st.session_state.history.append(saved); persist()
+                    st.session_state.pending = None; st.warning(message)
+                else: st.error(message)
         if st.button("تجاهل النتيجة"):
-            st.session_state.pending = None
-            st.info("تم تجاهل النتيجة؛ ما تسجلاتش.")
+            st.session_state.pending = None; st.info("تم تجاهل النتيجة؛ ما تسجلاتش.")
 
     st.divider()
-    st.subheader("التقرير")
-    st.write(f"عدد السجلات فهاد الجلسة (محلي): {len(st.session_state.history)}")
+    st.subheader("التقرير (دائم)")
+    st.write(f"عدد السجلات المحفوظة: {len(st.session_state.history)}")
     cfg_now = get_form_config()
     if cfg_now.get("responses_url"):
         st.link_button("📊 شوف سجلات Google Form كاملة", cfg_now["responses_url"])
@@ -407,24 +453,30 @@ else:
         from collections import Counter
         c = Counter([r.get("status", "?") if isinstance(r, dict) else "?" for r in history])
         st.write("توزيع الحالات:")
-        for k, v in c.items():
-            st.write(f"- {k} : {v} مرة")
+        for k, v in c.items(): st.write(f"- {k} : {v} مرة")
+        colA, colB = st.columns(2)
+        with colA:
+            st.download_button("⬇️ حمل السجل JSON", data=json.dumps(history, ensure_ascii=False, indent=2), file_name="impact_history.json", mime="application/json")
+        with colB:
+            uploaded = st.file_uploader("⬆️ رفع سجل قديم JSON", type=["json"])
+            if uploaded is not None:
+                try:
+                    loaded = json.load(uploaded)
+                    if isinstance(loaded, list):
+                        st.session_state.history = loaded; persist(); st.success(f"رجعت {len(loaded)} سجل من الملف."); st.rerun()
+                except Exception as e: st.error(f"الملف ما تقراش: {e}")
         if st.button("🧹 حيد التكرار من التقرير"):
-            cleaned, removed = dedupe_history(history)
-            st.session_state.history = cleaned
-            if removed == 0:
-                st.info("ما كاين حتى تكرار. التقرير نقي.")
-            else:
-                st.success(f"حيدت {removed} سجل مكرر. دابا التقرير فيه {len(cleaned)} سجل نقي.")
+            cleaned, removed = dedupe_history(history); st.session_state.history = cleaned; persist()
+            if removed == 0: st.info("ما كاين حتى تكرار.")
+            else: st.success(f"حيدت {removed} سجل مكرر.")
         for row in reversed(history):
             if isinstance(row, dict):
                 sync_label = " | Google: إرسال غير مؤكد" if row.get("google_form_status") == "submitted_unverified" else ""
                 st.write(f"{row.get('date','')} | {row.get('kind','')} | الحالة: {row.get('status','')} | {row.get('rule','')}{sync_label}")
-        if st.button("مسح سجل هاد الجلسة"):
-            st.session_state.history = []
-            st.success("تم مسح السجل المحلي من هاد الجلسة فقط.")
+        if st.button("مسح السجل الدائم"):
+            st.session_state.history = []; persist(); st.success("تم مسح السجل الدائم.")
     else:
         st.caption("ما كاين حتى سجل محلي دابا.")
 
 st.divider()
-st.caption("IMPACT التنفيذي الجيل الثالث v7.3 — بلا Hardcoded Form، Secrets فقط، وفحص Pyflakes اختياري.")
+st.caption("IMPACT التنفيذي الجيل الثالث v8 — تنفيذ فعلي Sandbox + حفظ دائم + حماية بكلمة سر.")
