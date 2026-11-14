@@ -64,9 +64,11 @@ def normalize_arabic(text):
         text = text.replace(a, b)
     return text
 
+# --- v6.1 FIX 1: fingerprint فيه التاريخ ديال اليوم فقط ---
 def fingerprint(rec):
-    key = f"{rec.get('kind','')}|{rec.get('status','')}|{rec.get('rule','')}|{rec.get('details','')}"
-    return hashlib.md5(key.encode("utf-8")).hexdigest()
+    date_only = str(rec.get('date',''))[:10]
+    key = f"{date_only}|{rec.get('kind','')}|{rec.get('status','')}|{rec.get('rule','')}|{rec.get('details','')}"
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
 def is_duplicate(rec, history):
     fp = fingerprint(rec)
@@ -90,6 +92,14 @@ def dedupe_history(history):
         out.append(h)
     return out, removed
 
+def _is_secret_name(name):
+    name = str(name).lower()
+    return any(sec in name for sec in ["key", "password", "secret", "token", "auth"])
+
+def _is_secret_value(node):
+    return isinstance(node, ast.Constant) and isinstance(node.value, str) and len(node.value) > 5
+
+# --- v6.1 FIX 2: فحص المفاتيح كيشوف Assign + AnnAssign + Dict ---
 def inspect_python_advanced(code):
     try:
         tree = ast.parse(code)
@@ -112,11 +122,19 @@ def inspect_python_advanced(code):
                 empty_functions += 1
         elif isinstance(node, ast.Assign):
             for target in node.targets:
-                if isinstance(target, ast.Name):
-                    var_name = target.id.lower()
-                    if any(sec in var_name for sec in ["key", "password", "secret", "token", "auth"]):
-                        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str) and len(node.value.value) > 5:
+                if isinstance(target, ast.Name) and _is_secret_name(target.id) and _is_secret_value(node.value):
+                    hardcoded_secret_found = True
+                if isinstance(target, ast.Name) and isinstance(node.value, ast.Dict):
+                    for k, v in zip(node.value.keys, node.value.values):
+                        if isinstance(k, ast.Constant) and isinstance(k.value, str) and _is_secret_name(k.value) and _is_secret_value(v):
                             hardcoded_secret_found = True
+        elif isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name) and _is_secret_name(node.target.id) and node.value is not None and _is_secret_value(node.value):
+                hardcoded_secret_found = True
+        elif isinstance(node, ast.Dict):
+            for k, v in zip(node.keys, node.values):
+                if isinstance(k, ast.Constant) and isinstance(k.value, str) and _is_secret_name(k.value) and _is_secret_value(v):
+                    hardcoded_secret_found = True
     if not imports:
         warnings.append("ملاحظة: ما كاين حتى import مسجل فالعقد البرمجية.")
     if hardcoded_secret_found:
@@ -369,4 +387,4 @@ else:
         st.caption("ما كاين حتى سجل محلي دابا.")
 
 st.divider()
-st.caption("IMPACT التنفيذي — ما نعتابروش النتيجة مؤكدة حتى يكون عندنا دليل مناسب.")
+st.caption("IMPACT التنفيذي v6.1 — ما نعتابروش النتيجة مؤكدة حتى يكون عندنا دليل مناسب.")
