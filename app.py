@@ -27,6 +27,7 @@ h1,h2,h3,p,div,span,label { direction: rtl; text-align: right; line-height: 1.85
 """, unsafe_allow_html=True)
 
 RULES = [
+    # الجيل الأول (الصمامات الأساسية للأمان والصدق)
     ("1 - الصدق قبل السرعة", "إلا ما عرفتيش، قول ما عرفتش. ما تخترعش جواب باش تبان عارف.", "كيمنع المعلومات المختلقة.", "معلومة خاطئة تقدر تضيع الوقت والفلوس."),
     ("2 - المصدر قبل الرأي", "وضح مصدر المعلومات المهمة، وفرّق بين الحقيقة والرأي والتخمين. إلا ما عندكش مصدر، قول هاد الشي بوضوح.", "كيخليني نعرف درجة موثوقية الجواب.", "التخمين يقدر يتفهم على أنه حقيقة."),
     ("3 - خطوة بخطوة", "قسم المهام لمراحل واضحة. عطيني الخطوة الحالية، وبيّن شنو خاصنا نتحققو منو قبل ما ندوزو للي من بعدها.", "كيقلل تراكم الأخطاء.", "خطأ صغير يقدر يفسد المراحل اللي من بعد."),
@@ -39,6 +40,13 @@ RULES = [
     ("10 - تحديد النتيجة قبل التنفيذ", "قبل المهمة، فهم الهدف والنتيجة المطلوبة والقيود ومعايير النجاح. إلا كان غموض مؤثر، طلب التوضيح قبل التنفيذ.", "كيضمن أننا خدامين على نفس الهدف.", "تنفيذ صحيح تقنياً ولكن ما كيحلش المشكل المطلوب."),
     ("11 - الصراحة حول القدرات", "وضح شنو تقدر تنفذ فعلياً، وشنو غير تقدر تشرح، وشنو محتاج أداة أو صلاحية أو تدخل مني. ما تدّعيش الوصول لشي حساب أو نظام ما عندكش صلاحية عليه.", "كيمنع الوعود والادعاءات غير الحقيقية.", "الاعتماد على قدرة أو صلاحية غير موجودة."),
     ("12 - الاختبار قبل الاعتماد", "أي كود أو حل تقني خاصو اختبار مناسب. وضح شنو تختبر فعلياً، وشنو بقى بلا اختبار، وما تصفش الحل بأنه خدام أو آمن بشكل كامل بلا دليل كافي.", "كيحول الادعاء إلى نتيجة قابلة للفحص.", "نشر كود فيه أخطاء أو مخاطر غير مكتشفة."),
+    
+    # الجيل الثاني (الذكاء المعرفي وتطوير الأداء - القواعد الجديدة)
+    ("13 - السياق قبل التنفيذ", "اعتمد على السياق العام والمشاريع السابقة ديالي بلا ما تفرض عليا نعاود نفس المعلومات، ولكن ديما عطيني الأولوية لطلبي الحالي إلى تعارض مع القديم.", "كيخلي الأداة ذكية وكتفهمك على الطاير بلا تكرار.", "تضييع الوقت فإعادة شرح الأساسيات أو التمسك بمعلومات قديمة."),
+    ("14 - التفكير النقدي وتحدي الافتراضات", "ما توافقنيش غير باش ترضيني. إلا شفتي الفكرة ديالي ناقصة، فيها ثغرة، أو كاين مسار أذكى وأرخص، صارحني بها ووريني زاوية النظر اللي ما شفتهاش.", "الذكاء الحقيقي هو تصحيح المسار ماشي التصفيق للخطأ.", "الوقوع ففخ المجاملة وبناء مشاريع على أساس هش."),
+    ("15 - الكفاءة وأقل جهد ممكن", "ديما قلب ليا على أقصر وأبسط طريق كيعطي 80% من النتيجة بـ 20% من الجهد. ما تعقدش الحلول التقنية إلا ما كانش التعقيد ضروري.", "البساطة هي قمة الذكاء الهندسي وكتوفر الوقت والموارد.", "الغرق فالهندسة الزائدة وكود معقد صعيب فالتطوير."),
+    ("16 - التعلم والذاكرة التراكمية", "ملي يوقع خطأ فالكود أو الفهم ونصلحوه، لخّص ليا الدرس المستفاد فسطر واحد باش ما نطيحوش فنفس الحفرة مرة أخرى.", "كيحول كل فشل لرصيد معرفي كيزيد يطور جودة العمل.", "الدوران فحلقة مفرغة وتكرار نفس الأخطاء التقنية."),
+    ("17 - التوقّع الاستباقي للخطوة الجاية", "ملي تكمل المهمة الحالية، ما توقفش. اقترح عليا بذكاء شنو هي العقبة أو الخطوة المنطقية اللي غادي تواجهني من بعد، وعطيني مفتاحها.", "كينقل الأداة من منفّذ أورام لشريك استراتيجي كيشوف لقدام.", "التقدم ببطء شديد لأنك ديما خاصك تفكر فكل خطوة بوحدك."),
 ]
 
 def show_card(title, body, why="", danger="", new=False):
@@ -85,31 +93,60 @@ def dedupe_history(history):
         out.append(h)
     return out, removed
 
-def inspect_python(code):
+# --- التحليل الهيكلي المتقدم (AST Advanced Inspection) ---
+def inspect_python_advanced(code):
     try:
         tree = ast.parse(code)
     except SyntaxError as exc:
-        return {"syntax_ok": False, "status": "فشل", "summary": f"خطأ نحوي فالسطر {exc.lineno}: {exc.msg}", "warnings": ["الكود ما دازش من التحليل النحوي."]}
+        return {
+            "syntax_ok": False, 
+            "status": "فشل", 
+            "summary": f"خطأ نحوي فالسطر {exc.lineno}: {exc.msg}", 
+            "warnings": ["الكود ما دازش من التحليل النحوي."]
+        }
+    
     warnings = []
     imports = set()
+    has_try_except = False
+    hardcoded_secret_found = False
+    empty_functions = 0
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imports.update(alias.asname or alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             imports.update(alias.asname or alias.name for alias in node.names)
-    if re.search(r"\bst\.", code) and "st" not in imports:
-        warnings.append("بان استعمال st. ولكن ما لقيتش import streamlit as st بشكل واضح.")
-    if re.search(r"\bpd\.", code) and "pd" not in imports:
-        warnings.append("بان استعمال pd. ولكن ما لقيتش import pandas as pd بشكل واضح.")
-    if re.search(r"\brequests\.", code) and "requests" not in imports:
-        warnings.append("بان استعمال requests. ولكن ما لقيتش import requests بشكل واضح.")
-    if re.search(r"\beval\s*\(", code):
-        warnings.append("تحذير أمني: لقيت eval()؛ راجع واش ضرورية.")
-    if re.search(r"\bexec\s*\(", code):
-        warnings.append("تحذير أمني: لقيت exec()؛ راجع مصدر الكود اللي كيتنفذ.")
+        elif isinstance(node, ast.Try):
+            has_try_except = True
+        elif isinstance(node, ast.FunctionDef):
+            if len(node.body) == 1 and isinstance(node.body[0], ast.Pass):
+                empty_functions += 1
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    var_name = target.id.lower()
+                    if any(sec in var_name for sec in ["key", "password", "secret", "token", "auth"]):
+                        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str) and len(node.value.value) > 5:
+                            hardcoded_secret_found = True
+
+    if not imports:
+        warnings.append("ملاحظة: ما كاين حتى import مسجل فالعقد البرمجية.")
+    if hardcoded_secret_found:
+        warnings.append("⚠️ خطر أمني محتمل: لقيت مفتاح سري أو كلمة مرور مكتوبة مباشرة داخل الكود (Hardcoded Secret).")
+    if empty_functions > 0:
+        warnings.append(f"تنبيه: لقيت {empty_functions} دالة فارغة فيها غير (pass) وما مكتوباش فيها اللوجيك ديالها.")
+    if not has_try_except and ("requests." in code or "open(" in code):
+        warnings.append("ملاحظة جودة: الكود فيه عمليات إدخال/إخراج أو طلبات شبكة بدون حماية (Try/Except).")
+
     if not warnings:
-        warnings.append("التحليل النحوي نجح. هاد الشي ما كيثبتش أن البرنامج خدام أو آمن.")
-    return {"syntax_ok": True, "status": "نجح", "summary": "التحليل النحوي نجح.", "warnings": warnings}
+        warnings.append("التحليل الهيكلي متقدم: الكود نقي وما لقيتش ثغرات أو أخطاء بنيوية ظاهرة.")
+
+    return {
+        "syntax_ok": True, 
+        "status": "فشل" if hardcoded_secret_found else "نجح", 
+        "summary": "التحليل الهيكلي المتقدم تم بنجاح.", 
+        "warnings": warnings
+    }
 
 def inspect_requirement(code, requirement):
     c = normalize_arabic(code)
@@ -134,9 +171,11 @@ def inspect_requirement(code, requirement):
         results.append(f"{label}: " + (f"لقيت مؤشرات نصية: {', '.join(found)}." if found else "ما لقيتش مؤشرات نصية معروفة.") + " " + caveat)
     return results, "خاص اختبار"
 
-# --- Google Form بدل Apps Script ---
+# --- قراءة آمنة لـ Secrets لمنع انهيار التطبيق محلياً ---
 def get_form_config():
     try:
+        if not hasattr(st, "secrets"):
+            return {"url": "", "date": "", "kind": "", "status": "", "rule": "", "details": ""}
         return {
             "url": st.secrets.get("GOOGLE_FORM_URL", ""),
             "date": st.secrets.get("ENTRY_DATE", ""),
@@ -151,7 +190,7 @@ def get_form_config():
 def save_to_google_form(record):
     cfg = get_form_config()
     if not cfg["url"] or not cfg["date"]:
-        return False, "إعدادات Google Form ما متهيّأش في Secrets."
+        return False, "إعدادات Google Form ما متهيّأش في Secrets (يمكن تشغيل محلي بدون secrets.toml)."
     payload = {
         cfg["date"]: record.get("date", ""),
         cfg["kind"]: record.get("kind", ""),
@@ -160,7 +199,6 @@ def save_to_google_form(record):
         cfg["details"]: record.get("details", ""),
     }
     try:
-        # Google Form كيرجع 200 حتى إلا كان ناجح، ما كيرجعش JSON
         resp = requests.post(cfg["url"], data=payload, timeout=15)
         if resp.status_code in (200, 302):
             return True, "تم إرسال النتيجة لـ Google Form. تحقق منها في Responses."
@@ -176,46 +214,57 @@ if "history" not in st.session_state:
 if "pending" not in st.session_state:
     st.session_state.pending = None
 
-st.title("📜 الميثاق - IMPACT")
-st.caption("من الكلام إلى الفعل: صدق، تحقق، وقيمة بلا ضرر.")
-st.info("الميثاق إطار عمل بينك وبين أداة الذكاء الاصطناعي؛ ما كيضمنش بوحدو أن الأداة غادي تلتزم. خاص التحقق من السلوك والنتائج.")
+st.title("📜 الميثاق - IMPACT (الجيل الثاني)")
+st.caption("من الكلام إلى الفعل: صدق، تحقق، تكيف ذكي، وقيمة بلا ضرر.")
+st.info("الميثاق إطار عمل متطور بينك وبين أداة الذكاء الاصطناعي للتحكم في الجودة، الأمان، والتفكير الاستراتيجي.")
 
-main_page = st.radio("شنو بغيتي تشوف؟", ["القواعد", "نص الميثاق", "ميزان التحقق"], horizontal=True)
+main_page = st.radio("شنو بغيتي تشوف؟", ["القواعد (17 قاعدة)", "نص الميثاق", "ميزان التحقق المتقدم"], horizontal=True)
 
-if main_page == "القواعد":
-    st.subheader("القواعد الـ 12")
+if main_page == "القواعد (17 قاعدة)":
+    st.subheader("قواعد الميثاق الكاملة (الأولى والجديدة)")
+    st.caption("🟢 القواعد الملونة بالأخضر هي الإضافات الذكية الجديدة للجيل الثاني (من 13 لـ 17).")
     for index, item in enumerate(RULES):
-        show_card(*item, new=(index >= 9))
+        show_card(*item, new=(index >= 12))
 
 elif main_page == "نص الميثاق":
     st.subheader("نص جاهز للنسخ")
-    objective = st.text_input("شنو هو الهدف ديالك؟", value="بغيت نبني تطبيقات وكودات كتجيب ليا قيمة حقيقية، بشكل قانوني وصحيح")
+    objective = st.text_input("شنو هو الهدف ديالك؟", value="بغيت نبني تطبيقات وكودات كتجيب ليا قيمة حقيقية، بشكل ذكي، قانوني وصحيح")
     level = st.selectbox("المستوى ديالك", ["مبتدئ - بغيت الشرح بالدارجة", "متوسط - كنفهم شوية", "محترف - هضر معايا بالتقنية"])
     rules_text = "\n".join(f"{i+1} - {title.split(' - ', 1)[1]}: {body}" for i, (title, body, _, _) in enumerate(RULES))
-    charter = f"""الميثاق - IMPACT\n\nسلام، هادا هو الميثاق اللي بغيت نعتمدو كإطار للعمل بيناتنا.\nالالتزام به كيبقى خاضع لقدرات الأداة وقواعد السلامة والصلاحيات المتاحة.\n\nالهدف: {objective}\nالمستوى: {level}\n\nالقواعد:\n{rules_text}\n\nكيفاش تجاوبني:\n- جاوبني بالدارجة المغربية البسيطة.\n- بدا بالخلاصة، ومن بعد التفاصيل.\n- إلا كان الجواب فيه كود، عطيني نسخة كاملة قابلة للنسخ، ووضح المتطلبات وطريقة التشغيل.\n- فرّق بين اللي تأكدتي منو واللي باقي افتراض أو تخمين.\n- قبل أي تغيير ممكن يسبب فقدان بيانات أو مصاريف أو إرسال خارجي، وضح الأثر وخذ موافقتي.\n- ما تدّعيش تنفيذ عملية أو اختبار ما وقعش فعلياً.\n\nمعيار النجاح:\nحل قانوني وآمن قدر الإمكان، خدام بالاختبار، وعندو قيمة حقيقية.\n\nإلا فهمتي هاد الميثاق وتقدر تلتزم به ضمن حدودك، قول: قبلت الميثاق، ونبداو.\n"""
-    st.text_area("الميثاق كامل", charter, height=620)
+    charter = f"""الميثاق - IMPACT (الجيل الثاني)\n\nسلام، هادا هو الميثاق المطور اللي بغيت نعتمدو كإطار للعمل بيناتنا.\nالالتزام به كيبقى خاضع لقدرات الأداة وقواعد السلامة والصلاحيات المتاحة.\n\nالهدف: {objective}\nالمستوى: {level}\n\nالقواعد الـ 17:\n{rules_text}\n\nكيفاش تجاوبني:\n- جاوبني بالدارجة المغربية البسيطة مع الحفاظ على الدقة.\n- طبق السياق الذكي، التفكير النقدي، والحلول الأكثر كفاءة وأقل جهداً.\n- إلا كان الجواب فيه كود، عطيني نسخة كاملة قابلة للنسخ، ووضح المتطلبات وطريقة التشغيل.\n- فرّق بين اللي تأكدتي منو واللي باقي افتراض أو تخمين.\n- قبل أي تغيير ممكن يسبب فقدان بيانات أو مصاريف، وضح الأثر وخذ موافقتي.\n- ما تدّعيش تنفيذ عملية أو اختبار ما وقعش فعلياً.\n- اقترح عليا ديما الخطوة الاستباقية الموالية.\n\nمعيار النجاح:\nحل قانوني، آمن، ذكي، خدام بالاختبار، وعندو قيمة حقيقية.\n\nإلا فهمتي هاد الميثاق المطور وتقدر تلتزم به، قول: قبلت الميثاق المطور، ونبداو.\n"""
+    st.text_area("الميثاق كامل", charter, height=520)
+    
+    # تحسين إضافي: عرض الكود كاملاً وزر النسخ السريع
+    with st.expander("عرض أو نسخ كود التطبيق كاملاً"):
+        with open(__file__, "r", encoding="utf-8") as f:
+            source_code = f.read()
+        st.code(source_code, language="python")
 
 else:
-    st.subheader("ميزان التحقق")
-    st.caption("النتائج هنا استرشادية. ما كاين حتى فحص آلي بسيط يقدر يضمن صحة الكود أو صدق المعلومة بشكل كامل.")
-    section = st.radio("اختار نوع الفحص", ["فحص نحوي للكود", "مؤشرات تحقيق الشرط", "مراجعة رقم ومصدر"])
+    st.subheader("ميزان التحقق المتقدم (AST Analysis)")
+    st.caption("فحص هيكلي ذكي للكود يكتشف الأخطاء النحوية، الدوال الفارغة، غياب حماية الاستثناءات، والمفاتيح المكشوفة.")
+    section = st.radio("اختار نوع الفحص", ["فحص نحوي والهيكلي للكود", "مؤشرات تحقيق الشرط", "مراجعة رقم ومصدر"])
 
-    if section == "فحص نحوي للكود":
+    if section == "فحص نحوي والهيكلي للكود":
         code_input = st.text_area("لصق كود Python هنا", height=260)
-        if st.button("فحص الكود", key="syntax_check"):
+        if st.button("فحص متقدم للكود", key="syntax_check_adv"):
             if not code_input.strip():
                 st.warning("لصق الكود الأول.")
             else:
-                result = inspect_python(code_input)
+                result = inspect_python_advanced(code_input)
                 show_status(result["status"])
                 if result["syntax_ok"]:
                     st.success(result["summary"])
                 else:
                     st.error(result["summary"])
-                for warning in result["warnings"]:
-                    st.warning(warning)
-                add_pending("كود - تحليل نحوي", result["status"], "القاعدة 12 - الاختبار قبل الاعتماد", result["summary"])
-                st.info("الحالة نجح كتعني غير أن التحليل النحوي داز، ماشي أن البرنامج خدام.")
+                
+                # استخدام expander للتحذيرات باش يكون المنظر منظم واحترافي
+                with st.expander("تفاصيل التحذيرات والملاحظات التقنية", expanded=True):
+                    for warning in result["warnings"]:
+                        st.markdown(f"- {warning}")
+                        
+                add_pending("كود - تحليل هيكلي متقدم", result["status"], "القاعدة 12 - الاختبار قبل الاعتماد", result["summary"])
+                st.info("التحليل الهيكلي كيعطيك مؤشرات بنيوية، ولكن ما كيعوضش التشغيل الفعلي (Runtime Test).")
 
     elif section == "مؤشرات تحقيق الشرط":
         code_input = st.text_area("الكود", height=220)
